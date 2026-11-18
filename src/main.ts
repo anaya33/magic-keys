@@ -60,7 +60,7 @@ function start(): KeyboardView {
     <main class="play" data-mode="magic">
       <header class="topbar">
         <div class="brand">
-          <button class="logo-btn" id="about" aria-label="About Magic Keys"><img src="/icons/favicon-64.png" alt="" width="26" height="26" /></button>
+          <button class="logo-btn" id="about" aria-label="About Magic Keys"><img src="${import.meta.env.BASE_URL}icons/favicon-64.png" alt="" width="26" height="26" /></button>
           <button class="song-btn" id="songs" aria-label="Choose a song">
             ${ICONS.notes}<span class="song-btn-title">Songs</span>${ICONS.chevron}
           </button>
@@ -427,7 +427,8 @@ function start(): KeyboardView {
  */
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
+    const base = import.meta.env.BASE_URL; // "/" locally, "/magic-keys/" on GitHub Pages
+    navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).catch(() => {
       /* not fatal: the app works the same, just without the offline cache */
     });
   });

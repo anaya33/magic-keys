@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // Where the app is served from: "/" locally, "/magic-keys/" on GitHub Pages
+  // (the deploy workflow sets BASE_PATH). Every asset path in the app follows this.
+  base: process.env.BASE_PATH ?? '/',
   optimizeDeps: {
     // Pre-bundle these together in development so Basic Pitch and our code share a
     // single TensorFlow.js instance (and its GPU backend), instead of two copies.

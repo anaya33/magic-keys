@@ -7,8 +7,10 @@
  *  - The page itself may change between deploys, so: network first, cache as fallback.
  * Only this site's own files are touched; nothing is sent anywhere.
  */
-const CACHE = 'magic-keys-v2';
-const NEVER_CHANGES = /^\/(samples|assets|icons|fonts|models)\//;
+const CACHE = 'magic-keys-v3';
+const NEVER_CHANGES = /^(samples|assets|icons|fonts|models)\//;
+/** The app's base path ("/" locally, "/magic-keys/" on GitHub Pages). */
+const SCOPE_PATH = new URL(self.registration.scope).pathname;
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -27,7 +29,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
-  if (NEVER_CHANGES.test(url.pathname)) {
+  if (!url.pathname.startsWith(SCOPE_PATH)) return;
+  const path = url.pathname.slice(SCOPE_PATH.length); // e.g. "samples/A4.mp3"
+
+  if (NEVER_CHANGES.test(path)) {
     event.respondWith(
       caches.match(request).then(
         (hit) =>
@@ -52,7 +57,7 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE).then((cache) => cache.put(request, copy));
           return response;
         })
-        .catch(() => caches.match(request).then((hit) => hit || caches.match('/'))),
+        .catch(() => caches.match(request).then((hit) => hit || caches.match(SCOPE_PATH))),
     );
   }
 });
