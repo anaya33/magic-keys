@@ -16,7 +16,7 @@ import './styles.css';
 import { piano } from './audio/piano';
 import { ComputerKeys } from './input/computerKeys';
 import { connectMidi } from './input/midi';
-import { loadSong, restoreYourSongs } from './music/library';
+import { isYourSong, listSongs, loadSong, restoreYourSongs } from './music/library';
 import { noteName } from './music/notes';
 import type { Song } from './music/types';
 import { LearnMode, type Hands } from './modes/learn';
@@ -124,6 +124,14 @@ function start(): KeyboardView {
   // ---- sheet music
   const sheet = new SheetView();
   $('.sheet-slot').append(sheet.el);
+  const previewFor = (id: string) => `${import.meta.env.BASE_URL}sheet-previews/${id}.svg`;
+  void sheet.showPreview(previewFor('fur-elise')); // the first song's opening bars, right away
+  // The other songs' pictures download quietly afterwards, so switching songs is instant too.
+  setTimeout(() => {
+    void listSongs().then((songs) => {
+      for (const s of songs) if (!isYourSong(s.id)) new Image().src = previewFor(s.id);
+    });
+  }, 1500);
 
   // ---- Free play: a trail of the notes you just played
   const emptyMessage = played.innerHTML;
@@ -298,7 +306,9 @@ function start(): KeyboardView {
     $('.song-title').textContent = next.title;
     $('.song-composer').textContent = next.composer;
     $('.song-btn-title').textContent = next.title;
-    if (next.musicXml) void sheet.show(next.musicXml);
+    // Built-in songs have a ready-made picture of their opening bars, shown instantly.
+    const preview = isYourSong(next.id) ? undefined : previewFor(next.id);
+    if (next.musicXml) void sheet.show(next.musicXml, preview);
     magic = new MagicMode(next, {
       light: (midi, on) => keyboard.setHighlight(midi, 'magic', on),
       follow: (groups) => keyboard.follow(groups),

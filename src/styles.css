@@ -197,10 +197,11 @@ html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adj
 }
 .sheet.is-loading .sheet-placeholder { display: flex; }
 .sheet.is-loading .sheet-canvas { visibility: hidden; }
+/* The ready-made picture of the opening bars: placed exactly where the live score goes. */
+.sheet-preview { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: auto; pointer-events: none; }
+.sheet.is-loading:has(.sheet-preview:not([hidden])) .sheet-placeholder { display: none; }
 .sheet-placeholder .staff { display: grid; gap: 7px; }
 .sheet-placeholder .staff span { height: 1.5px; background: var(--paper-edge); }
-.sheet-placeholder p { margin: 0; text-align: center; color: var(--ink-soft); font-size: 0.9rem; animation: breathe 1.6s ease-in-out infinite; }
-@keyframes breathe { 50% { opacity: 0.45; } }
 
 /* The notes being played turn the same blue as the keys they light up. */
 .sheet .is-current path,
@@ -861,7 +862,7 @@ kbd {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .panel:not([hidden]), .panel:not([hidden]) > *, .sheet-placeholder p { animation: none; }
+  .panel:not([hidden]), .panel:not([hidden]) > * { animation: none; }
   .key-cap, .icon-btn, .close-btn, .pill, .pill-btn, .pedal-tag, .progress-fill, .keyboard-track.is-sliding, .song-btn, .song-card, .tile.is-animated, .listen-btn, .listen-meter span, .tuning-needle { transition: none; }
   .tile.wiggle { animation: none; }
   .confetti { display: none; }
