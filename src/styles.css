@@ -712,6 +712,21 @@ kbd {
 .listen[data-state='counting'] .listen-meter,
 .listen[data-state='listening'] .listen-meter { display: flex; }
 .listen[data-state='done'] [data-show~='done'] { display: flex; }
+.listen[data-state='ask'] [data-show~='ask'],
+.listen[data-state='blocked'] [data-show~='blocked'] { display: grid; }
+.listen[data-state='blocked'] .listen-btn { display: none; }
+
+/* Asking for the microphone: a flat blue mic. */
+.mic-ask { justify-items: center; }
+.mic-icon { position: relative; width: 72px; height: 72px; border-radius: 50%; background: var(--ivory); display: grid; justify-items: center; align-content: center; gap: 4px; }
+.mic-head { width: 18px; height: 28px; border-radius: 9px; background: var(--body-shade); }
+.mic-stand { width: 26px; height: 9px; border: 3px solid var(--ink); border-top: 0; border-radius: 0 0 14px 14px; }
+
+/* Blocked: the steps to allow it, as a flat card. */
+.mic-help { width: 100%; text-align: left; background: var(--ivory); border-radius: 18px; padding: 18px 22px; box-shadow: 0 4px 0 var(--ivory-edge); }
+.mic-help-title { margin: 0 0 10px; font-weight: 600; }
+.mic-steps { margin: 0; padding-left: 22px; display: grid; gap: 8px; line-height: 1.5; }
+.mic-help-note { margin: 12px 0 0; color: var(--ink-soft); font-size: 0.9rem; }
 .listen-body { width: min(620px, 100%); }
 
 .listen-options { justify-items: center; gap: 14px; margin-bottom: 4px; }

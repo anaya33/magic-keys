@@ -2,6 +2,10 @@
  * ListenView — the full-screen Listen (record) panel.
  *
  *   idle       Sing or hum | Play an instrument · optional click (tempo)   [ Listen ]
+ *   ask        first time only: why we need the mic, then the browser's own pop-up
+ *              asks you to Allow                                  [ Allow microphone ]
+ *   blocked    the steps to allow the mic for *this* browser and device; the panel
+ *              carries on by itself as soon as it's allowed            [ Try again ]
  *   counting   4 · 3 · 2 · 1 with the click
  *   listening  the note you're singing right now, big, with a tuning needle,
  *              lit up on a small piano · level meter · timer                [ Stop ]
@@ -13,14 +17,15 @@
  */
 import { recordingToSong, type ListenResult, type RecordKind } from '../listen';
 import { MagicMode } from '../modes/magic';
-import { MAX_SECONDS, Recorder } from '../listen/recorder';
+import { howToAllowMic, micState, watchMic } from '../listen/micPermission';
+import { MAX_SECONDS, MicBlockedError, Recorder } from '../listen/recorder';
 import { warmUp } from '../listen/transcribe';
 import { noteName } from '../music/notes';
 import type { Song } from '../music/types';
 import { KeyboardView } from './keyboard';
 import { SheetView } from './sheet';
 
-type State = 'idle' | 'counting' | 'listening' | 'working' | 'done' | 'error';
+type State = 'idle' | 'ask' | 'blocked' | 'counting' | 'listening' | 'working' | 'done' | 'error';
 const BARS = 24;
 
 export class ListenView {
@@ -47,6 +52,9 @@ export class ListenView {
   /** Plays the recording back (Autoplay engine), lighting the small piano and the sheet. */
   private playback: MagicMode | null = null;
   private playbackBtn: HTMLButtonElement | null = null;
+  /** We explain before the browser's pop-up only once per visit. */
+  private explained = false;
+  private stopWatchingMic: () => void = () => {};
 
   constructor(private onOpenSong: (song: Song, mode: 'magic' | 'learn') => void) {
     this.el = document.createElement('div');
@@ -75,7 +83,17 @@ export class ListenView {
           </div>
         </div>
 
+        <div class="mic-ask" data-show="ask" aria-hidden="true">
+          <span class="mic-icon"><span class="mic-head"></span><span class="mic-stand"></span></span>
+        </div>
+
         <p class="listen-status" aria-live="polite"></p>
+
+        <div class="mic-help" data-show="blocked">
+          <p class="mic-help-title"></p>
+          <ol class="mic-steps"></ol>
+          <p class="mic-help-note"></p>
+        </div>
 
         <div class="live" data-show="listening counting done">
           <div class="live-note" aria-live="off">–</div>
@@ -149,10 +167,18 @@ export class ListenView {
   show(): void {
     this.el.hidden = false;
     this.setState('idle');
+    // The moment the microphone is allowed (e.g. in the browser's settings), carry on.
+    void watchMic((state) => {
+      if (state === 'granted' && (this.state === 'blocked' || this.state === 'ask')) {
+        this.setState('idle');
+        this.status.textContent = 'Microphone allowed. Tap Listen when you\'re ready.';
+      }
+    }).then((stop) => (this.stopWatchingMic = stop));
     if (this.kind === 'instrument') void warmUp().catch(() => {});
   }
 
   hide(): void {
+    this.stopWatchingMic();
     this.stopPlayback();
     if (this.state === 'listening' || this.state === 'counting') this.recorder.cancel();
     clearInterval(this.clock);
@@ -162,6 +188,15 @@ export class ListenView {
   private async onMainButton(): Promise<void> {
     if (this.state === 'listening' || this.state === 'counting') return this.stop();
     if (this.state === 'working') return;
+    if (this.state === 'idle') {
+      // Like meeting apps: check first, explain once, then let the browser ask.
+      const mic = await micState();
+      if (mic === 'denied') return this.setState('blocked');
+      if (mic !== 'granted' && !this.explained) {
+        this.explained = true;
+        return this.setState('ask');
+      }
+    }
     try {
       this.setState(this.clickOn ? 'counting' : 'listening');
       await this.recorder.start({ clickBpm: this.clickOn ? this.bpm : null, livePitch: this.kind === 'voice' });
@@ -190,6 +225,7 @@ export class ListenView {
 
   private fail(err: unknown): void {
     this.recorder.cancel();
+    if (err instanceof MicBlockedError) return this.setState('blocked');
     this.setState('error');
     this.status.textContent = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
   }
@@ -212,6 +248,29 @@ export class ListenView {
         if (this.clickOn) this.detail.textContent = 'Headphones keep the click out of your recording.';
         this.mainBtn.textContent = 'Listen';
         break;
+      case 'ask':
+        this.status.textContent = 'Magic Keys needs your microphone to hear you.';
+        this.detail.textContent = 'Your browser will ask next. Choose "Allow".';
+        this.mainBtn.textContent = 'Allow microphone';
+        break;
+      case 'blocked': {
+        const help = howToAllowMic();
+        this.status.textContent = 'The microphone is blocked for this site.';
+        this.el.querySelector('.mic-help-title')!.textContent = help.title;
+        const steps = help.steps.map((text) => {
+          const li = document.createElement('li');
+          li.textContent = text;
+          return li;
+        });
+        this.el.querySelector('.mic-steps')!.replaceChildren(...steps);
+        this.el.querySelector('.mic-help-note')!.textContent =
+          window.self !== window.top
+            ? 'This page is open inside another app, which may not allow microphones. Open it in Chrome or Safari.'
+            : 'This page carries on by itself once the microphone is allowed.';
+        this.mainBtn.textContent = '';
+        this.actions.append(this.action('Try again', () => void this.onMainButton(), true));
+        break;
+      }
       case 'counting':
         this.status.textContent = 'Get ready…';
         this.mainBtn.textContent = 'Stop';

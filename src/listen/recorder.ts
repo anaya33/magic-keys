@@ -20,6 +20,13 @@ import { pitchCandidates, rms } from './pitch';
 export const MAX_SECONDS = 60;
 const COUNT_IN = 4;
 
+/** The browser (or the computer) refused the microphone. The panel shows how to allow it. */
+export class MicBlockedError extends Error {
+  constructor() {
+    super('The microphone is blocked for this site.');
+  }
+}
+
 export interface Recording {
   samples: Float32Array;
   sampleRate: number;
@@ -74,9 +81,7 @@ export class Recorder {
       });
     } catch (err) {
       const name = err instanceof DOMException ? err.name : '';
-      if (name === 'NotAllowedError' || name === 'SecurityError') {
-        throw new Error('Microphone access was blocked. Allow the microphone for this site and try again.');
-      }
+      if (name === 'NotAllowedError' || name === 'SecurityError') throw new MicBlockedError();
       if (name === 'NotFoundError') throw new Error('No microphone was found.');
       throw new Error('The microphone could not be started.');
     }
