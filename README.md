@@ -38,4 +38,4 @@ npm run dev
 
 Salamander Grand Piano samples by Alexander Holm (CC BY 3.0). Sheet music by
 OpenSheetMusicDisplay. Listen uses Spotify's Basic Pitch. Song files from PDMX
-(see `songs/CREDITS.md`). Credits to [Resoomie](https://resoomie.com) Sans.
+(see `songs/CREDITS.md`). Font: [Resoomie](https://resoomie.com) Sans.

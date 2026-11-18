@@ -31,7 +31,7 @@ export class AboutView {
           <li><strong>Salamander Grand Piano</strong> samples by Alexander Holm (CC BY 3.0)</li>
           <li><strong>OpenSheetMusicDisplay</strong>, Spotify's <strong>Basic Pitch</strong>, <strong>Tone.js</strong></li>
           <li>Songs from <strong>PDMX</strong> (CC0)</li>
-          <li>Credits to <a href="https://resoomie.com" target="_blank" rel="noopener">Resoomie</a> Sans</li>
+          <li>Font: <a href="https://resoomie.com" target="_blank" rel="noopener">Resoomie</a> Sans</li>
         </ul>
       </div>`;
     document.body.append(this.el);
