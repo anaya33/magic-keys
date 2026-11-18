@@ -737,7 +737,10 @@ kbd {
 }
 .listen.is-in-tune .tuning-needle { background: var(--body-shade); }
 .listen[data-kind='instrument'] .live-note,
-.listen[data-kind='instrument'] .tuning { display: none; }
+.listen[data-kind='instrument'] .tuning,
+.listen[data-state='done'] .live-note,
+.listen[data-state='done'] .tuning { display: none; }
+.listen[data-state='done'] .live { margin-bottom: 4px; }
 .live-piano { width: min(560px, 100%); }
 .live-piano .overview { display: none; }
 .live-piano .keyboard-keys { border-radius: 8px; }

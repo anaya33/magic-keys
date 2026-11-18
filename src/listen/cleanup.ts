@@ -5,16 +5,18 @@
  * turn its raw notes into something you'd want to play back:
  *
  *  1. Drop very short notes (blips) and very quiet notes (room noise).
- *  2. Drop overtones: a real piano or voice note also rings an octave (and an octave
- *     and a fifth) higher, quietly. Those echoes are not notes anyone played.
+ *  2. Drop clear overtone leftovers: a much quieter copy exactly an octave above a
+ *     note. Real chord notes are kept.
  *  3. Merge flickers: the same pitch stopping and restarting within a moment is one note.
  *  4. Find the key (Krumhansl–Schmuckler key profiles) and snap *out-of-tune* notes to
  *     it: a note is only moved if it was measurably off-pitch towards a note of the
  *     scale (Basic Pitch reports that). Notes played cleanly are never changed, so
  *     intentional "out of key" notes, like Für Elise's D♯, survive.
- *  5. Keep the main melody and simple chords: notes that start together form a group;
- *     its top note is the melody, up to two notes close below it make a chord, and one
- *     low note can be the bass (left hand). Everything else is dropped.
+ *  5. Keep every real note, in layers: all notes that start together are kept and
+ *     split between the hands at middle C (right hand above, left hand below).
+ *     Two kinds of false notes are removed: a note re-detected while the same note is
+ *     still ringing (it's the same note, held), and a faint lone "shadow" an octave
+ *     away from a note that is sounding.
  *
  * The rhythm (beat, triplets, note lengths) is worked out afterwards, in rhythm.ts.
  */
@@ -34,6 +36,7 @@ export interface CleanResult extends KeyInfo {
 
 
 const MIN_DURATION = 0.12; // seconds
+const MIDDLE_C = 60; // notes from here up go to the right hand
 const TOGETHER = 0.07; // seconds: notes this close count as starting together
 const FLICKER_GAP = 0.03; // seconds: a break this short inside a note is a detection glitch
 const FLICKER_PIECE = 0.15; // seconds: …if one side of the break is this short
@@ -50,7 +53,8 @@ const MAJOR_FIFTHS = [0, -5, 2, -3, 4, -1, 6, 1, -4, 3, -2, 5];
 export function cleanUp(raw: RawNote[]): CleanResult {
   // 1. Blips and quiet noise.
   const loud = percentile(raw.map((n) => n.amplitude), 0.9);
-  let notes = raw.filter((n) => n.duration >= MIN_DURATION && n.amplitude >= Math.max(0.2, loud * 0.35));
+  // Inner chord notes are naturally softer than melody and bass, so the bar is low.
+  let notes = raw.filter((n) => n.duration >= MIN_DURATION && n.amplitude >= Math.max(0.1, loud * 0.18));
   if (notes.length === 0) {
     throw new Error("I couldn't hear any clear notes. Try playing a little louder, or closer to the microphone.");
   }
@@ -67,21 +71,16 @@ export function cleanUp(raw: RawNote[]): CleanResult {
   notes = notes.map((n) => ({ ...n, midi: snapToScale({ ...n, bend: n.bend - typicalBend }, scale) }));
   notes = mergeFlickers(notes); // snapping can make neighbours identical
 
-  // 5. Melody, chords and bass.
-  const groups = groupByOnset(notes);
+  // 5. Every real note, in layers.
+  notes = dropReattacksAndShadows(notes, loud);
   const kept: { note: RawNote; staff: 1 | 2; groupStart: number }[] = [];
-  for (const group of groups) {
-    const sorted = [...group].sort((a, b) => b.midi - a.midi);
-    const top = sorted[0];
-    kept.push({ note: top, staff: 1, groupStart: group[0].start });
-    const chord = sorted
-      .slice(1)
-      .filter((n) => n.midi > top.midi - 12 && n.midi !== top.midi && n.amplitude >= top.amplitude * 0.5)
-      .slice(0, 2);
-    for (const n of chord) kept.push({ note: n, staff: 1, groupStart: group[0].start });
-    // An octave or more below the melody is the bass (left hand).
-    const bass = sorted.reverse().find((n) => n.midi <= top.midi - 12 && n.amplitude >= top.amplitude * 0.4);
-    if (bass) kept.push({ note: bass, staff: 2, groupStart: group[0].start });
+  for (const group of groupByOnset(notes)) {
+    const seen = new Set<number>();
+    for (const n of group) {
+      if (seen.has(n.midi)) continue;
+      seen.add(n.midi);
+      kept.push({ note: n, staff: n.midi >= MIDDLE_C ? 1 : 2, groupStart: group[0].start });
+    }
   }
 
   return {
@@ -174,9 +173,9 @@ function snapToScale(note: RawNote, scale: Set<number>): number {
 }
 
 /**
- * Overtones: a note an octave (12), an octave and a fifth (19) or two octaves (24)
- * above a louder note that starts at the same moment is almost always that note's
- * own harmonic, not something that was played.
+ * Overtones: Basic Pitch is trained to ignore most harmonics already, so we only drop
+ * the clearest leftovers: a note exactly an octave above a much louder note that starts
+ * at the same moment. Real chord notes (a fifth, a tenth, two octaves up) are kept.
  */
 function dropOvertones(notes: RawNote[]): RawNote[] {
   const groups = groupByOnset(notes);
@@ -185,10 +184,38 @@ function dropOvertones(notes: RawNote[]): RawNote[] {
       (n) =>
         !group.some(
           // An overtone is always clearly quieter than the note that makes it.
-          (lower) => [12, 19, 24].includes(n.midi - lower.midi) && n.amplitude <= lower.amplitude * 0.75,
+          (lower) => n.midi - lower.midi === 12 && n.amplitude <= lower.amplitude * 0.55,
         ),
     ),
   );
+}
+
+/**
+ * Basic Pitch's two typical false notes:
+ *  - a held note detected again while it is still ringing (no new attack): it's the
+ *    same note, so it's folded into the first one;
+ *  - a faint, lone note an octave (or two) away from a note that's sounding at the time:
+ *    an echo of that note, not something played.
+ * Notes that start together with others (a played chord) are never touched.
+ */
+function dropReattacksAndShadows(notes: RawNote[], loud: number): RawNote[] {
+  const groups = groupByOnset(notes);
+  const alone = new Set(groups.filter((g) => g.length === 1).map((g) => g[0]));
+  const out: RawNote[] = [];
+  for (const n of [...notes].sort((a, b) => a.start - b.start)) {
+    if (alone.has(n)) {
+      const sounding = out.filter((m) => m.start < n.start && m.start + m.duration > n.start - 0.1);
+      const held = sounding.find((m) => m.midi === n.midi && n.amplitude <= m.amplitude);
+      if (held) {
+        held.duration = Math.max(held.duration, n.start + n.duration - held.start);
+        continue;
+      }
+      const shadow = sounding.some((m) => [12, 24].includes(Math.abs(m.midi - n.midi)));
+      if (shadow && n.amplitude < loud * 0.5) continue;
+    }
+    out.push({ ...n });
+  }
+  return out;
 }
 
 /** Notes that start within a moment of each other form one group (a note or a chord). */

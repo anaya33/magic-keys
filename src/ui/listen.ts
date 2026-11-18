@@ -7,10 +7,12 @@
  *              lit up on a small piano · level meter · timer                [ Stop ]
  *   working    "Turning your music into notes… 42%"
  *   done       "24 notes · A minor · 92 bpm · 3 triplet beats", the sheet music of
- *              what you sang                       [ Play it ] [ Learn it ] [ Try again ]
+ *              what you sang, and [ Play back ]: every note played on the piano, keys
+ *              lighting up and the sheet cursor following  [ Play it ] [ Learn it ] [ Try again ]
  *   error      a friendly message                                         [ Try again ]
  */
 import { recordingToSong, type ListenResult, type RecordKind } from '../listen';
+import { MagicMode } from '../modes/magic';
 import { MAX_SECONDS, Recorder } from '../listen/recorder';
 import { warmUp } from '../listen/transcribe';
 import { noteName } from '../music/notes';
@@ -42,6 +44,9 @@ export class ListenView {
   private clock = 0;
   private litKey: number | null = null;
   private result: ListenResult | null = null;
+  /** Plays the recording back (Autoplay engine), lighting the small piano and the sheet. */
+  private playback: MagicMode | null = null;
+  private playbackBtn: HTMLButtonElement | null = null;
 
   constructor(private onOpenSong: (song: Song, mode: 'magic' | 'learn') => void) {
     this.el = document.createElement('div');
@@ -72,7 +77,7 @@ export class ListenView {
 
         <p class="listen-status" aria-live="polite"></p>
 
-        <div class="live" data-show="listening counting">
+        <div class="live" data-show="listening counting done">
           <div class="live-note" aria-live="off">–</div>
           <div class="tuning" aria-hidden="true"><span class="tuning-mark"></span><span class="tuning-needle"></span></div>
           <div class="live-piano"></div>
@@ -148,6 +153,7 @@ export class ListenView {
   }
 
   hide(): void {
+    this.stopPlayback();
     if (this.state === 'listening' || this.state === 'counting') this.recorder.cancel();
     clearInterval(this.clock);
     this.el.hidden = true;
@@ -189,6 +195,7 @@ export class ListenView {
   }
 
   private setState(state: State): void {
+    if (state !== 'done') this.stopPlayback();
     this.state = state;
     this.el.dataset.state = state;
     this.el.dataset.kind = this.kind;
@@ -227,11 +234,16 @@ export class ListenView {
         this.status.textContent = parts.join(' · ');
         this.detail.textContent = `Saved as “${r.song.title}” in your songs.`;
         this.mainBtn.textContent = '';
+        this.playbackBtn = this.action('▶ Play back', () => this.togglePlayback(), true);
         this.actions.append(
-          this.action('Play it', () => this.openResult('magic'), true),
+          this.playbackBtn,
+          this.action('Play it', () => this.openResult('magic')),
           this.action('Learn it', () => this.openResult('learn')),
           this.action('Try again', () => this.setState('idle')),
         );
+        // Show the whole recording's range on the small piano.
+        const pitches = r.song.notes.map((n) => n.midi);
+        this.keyboard.ensureVisible([Math.min(...pitches), Math.max(...pitches)]);
         break;
       }
       case 'error':
@@ -274,6 +286,34 @@ export class ListenView {
     // Needle: −50 cents (flat) at the left edge, +50 (sharp) at the right.
     this.needle.style.transform = `translateX(calc(-50% + ${cents}%))`;
     this.el.classList.toggle('is-in-tune', Math.abs(cents) <= 12);
+  }
+
+  /**
+   * Play the recording back on the piano: every note, at the recorded tempo, with
+   * expression, the keys lighting up on the small piano and the sheet cursor following.
+   */
+  private togglePlayback(): void {
+    if (!this.result) return;
+    if (this.playback?.autoplaying) return this.stopPlayback();
+    this.stopPlayback();
+    this.playback = new MagicMode(this.result.song, {
+      light: (midi, on) => this.keyboard.setHighlight(midi, 'magic', on),
+      follow: (groups) => this.keyboard.follow(groups),
+      progress: () => {},
+      position: (beat) => this.sheet.goTo(beat),
+      autoplayChanged: (playing) => {
+        if (this.playbackBtn) this.playbackBtn.textContent = playing ? '❚❚ Pause' : '▶ Play back';
+      },
+      finished: () => {},
+    });
+    this.playback.startAutoplay();
+  }
+
+  private stopPlayback(): void {
+    this.playback?.destroy();
+    this.playback = null;
+    this.keyboard.clearHighlights('magic');
+    if (this.playbackBtn) this.playbackBtn.textContent = '▶ Play back';
   }
 
   private openResult(mode: 'magic' | 'learn'): void {
