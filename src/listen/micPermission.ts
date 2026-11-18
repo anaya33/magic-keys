@@ -34,60 +34,65 @@ export async function watchMic(onChange: (state: MicState) => void): Promise<() 
   }
 }
 
-/** Step-by-step instructions to allow the microphone, for the browser and device in use. */
-export function howToAllowMic(): { title: string; steps: string[] } {
-  const ua = navigator.userAgent;
-  const iPhone = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const android = /Android/.test(ua);
-  const mac = /Macintosh/.test(ua) && !iPhone;
-  const edge = /Edg\//.test(ua);
-  const firefox = /Firefox\//.test(ua);
-  const chrome = /Chrome\//.test(ua) && !edge;
-  const safari = /Safari\//.test(ua) && !chrome && !edge && !firefox;
+export type OS = 'mac' | 'windows' | 'linux' | 'chromeos' | 'ios' | 'android';
+type Browser = 'chrome' | 'edge' | 'firefox' | 'safari' | 'other';
 
-  if (iPhone) {
+/** Which operating system this is (Fedora, Ubuntu etc. all report as Linux). */
+export function detectOS(): OS {
+  const ua = navigator.userAgent;
+  const platform = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ?? navigator.platform ?? '';
+  if (/iPhone|iPad|iPod/.test(ua) || (/Mac/.test(platform) && navigator.maxTouchPoints > 1)) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  if (/CrOS/.test(ua) || /Chrome OS/i.test(platform)) return 'chromeos';
+  if (/Win/.test(platform) || /Windows/.test(ua)) return 'windows';
+  if (/Mac/.test(platform) || /Macintosh/.test(ua)) return 'mac';
+  return 'linux';
+}
+
+function detectBrowser(): Browser {
+  const ua = navigator.userAgent;
+  if (/Edg\//.test(ua)) return 'edge';
+  if (/Firefox\/|FxiOS/.test(ua)) return 'firefox';
+  if (/Chrome\/|CriOS/.test(ua)) return 'chrome';
+  if (/Safari\//.test(ua)) return 'safari';
+  return 'other';
+}
+
+const BROWSER_NAME: Record<Browser, string> = { chrome: 'Chrome', edge: 'Edge', firefox: 'Firefox', safari: 'Safari', other: 'your browser' };
+
+/** The few steps to allow the microphone, for this browser on this system. */
+export function howToAllowMic(): { title: string; steps: string[] } {
+  const os = detectOS();
+  const browser = detectBrowser();
+  const name = BROWSER_NAME[browser];
+
+  if (os === 'ios') {
     return {
-      title: 'On your iPhone or iPad',
-      steps: [
-        'Tap the "aA" (or page) button at the left of the address bar.',
-        'Tap "Website Settings", then set Microphone to "Allow" (or "Ask").',
-        'If that doesn\'t help: open the Settings app → Safari (or Chrome) → Microphone → "Allow".',
-        'Come back and tap Listen.',
-      ],
+      title: name === 'your browser' ? 'iPhone' : `${name} on iPhone`,
+      steps: ['Tap "aA" in the address bar → Website Settings → Microphone → Allow.', `Or: Settings app → ${browser === 'chrome' ? 'Chrome' : 'Safari'} → Microphone → Allow.`],
     };
   }
-  if (android) {
+  if (os === 'android') {
     return {
-      title: 'On your Android phone (Chrome)',
-      steps: [
-        'Tap the icon at the left of the address bar, then "Permissions".',
-        'Turn Microphone on (or tap "Reset permissions").',
-        'If Chrome itself is blocked: Settings app → Apps → Chrome → Permissions → Microphone → "Allow".',
-        'Come back and tap Listen.',
-      ],
+      title: `${name} on Android`,
+      steps: ['Tap the icon left of the address bar → Permissions → Microphone → Allow.', `Or: Settings → Apps → ${name === 'your browser' ? 'your browser' : name} → Permissions → Microphone → Allow.`],
     };
   }
-  const macTip = mac
-    ? ['Still blocked? On the Mac: System Settings → Privacy & Security → Microphone → switch on your browser, then reopen it.']
-    : ['Still blocked? Check your computer\'s privacy settings allow this browser to use the microphone.'];
-  if (safari) {
-    return {
-      title: 'In Safari',
-      steps: ['In the menu bar choose Safari → Settings for This Website…', 'Set Microphone to "Allow".', ...macTip],
-    };
-  }
-  if (firefox) {
-    return {
-      title: 'In Firefox',
-      steps: ['Click the microphone (or lock) icon at the left of the address bar.', 'Remove the "Blocked" setting for the microphone, then tap Listen again.', ...macTip],
-    };
-  }
-  return {
-    title: edge ? 'In Edge' : 'In Chrome',
-    steps: [
-      'Click the icon at the left of the address bar (it looks like two sliders or a lock).',
-      'Switch Microphone to "Allow" (or click "Reset permission").',
-      ...macTip,
-    ],
+
+  const inBrowser =
+    browser === 'safari'
+      ? 'Safari menu → Settings for This Website → Microphone → Allow.'
+      : browser === 'firefox'
+        ? 'Click the microphone icon in the address bar → clear "Blocked".'
+        : 'Click the icon left of the address bar → Microphone → Allow.';
+  const inSystem: Record<OS, string> = {
+    mac: `Mac: System Settings → Privacy & Security → Microphone → turn on ${name}.`,
+    windows: 'Windows: Settings → Privacy & security → Microphone → turn on access for apps and desktop apps.',
+    chromeos: 'ChromeOS: Settings → Privacy and security → Privacy controls → Microphone access on.',
+    linux: 'Linux: Settings → Sound → Input: pick your microphone and check it isn\'t muted.',
+    ios: '',
+    android: '',
   };
+  const osName: Record<OS, string> = { mac: 'Mac', windows: 'Windows', chromeos: 'ChromeOS', linux: 'Linux', ios: 'iPhone', android: 'Android' };
+  return { title: `${name[0].toUpperCase()}${name.slice(1)} on ${osName[os]}`, steps: [inBrowser, inSystem[os]] };
 }

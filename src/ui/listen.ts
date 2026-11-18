@@ -263,10 +263,9 @@ export class ListenView {
           return li;
         });
         this.el.querySelector('.mic-steps')!.replaceChildren(...steps);
+        // Inside another app's built-in browser the mic is often unavailable.
         this.el.querySelector('.mic-help-note')!.textContent =
-          window.self !== window.top
-            ? 'This page is open inside another app, which may not allow microphones. Open it in Chrome or Safari.'
-            : 'This page carries on by itself once the microphone is allowed.';
+          window.self !== window.top ? 'Or open this page in your regular browser.' : '';
         this.mainBtn.textContent = '';
         this.actions.append(this.action('Try again', () => void this.onMainButton(), true));
         break;

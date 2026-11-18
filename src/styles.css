@@ -580,6 +580,7 @@ kbd {
 .about-dot { flex: none; width: 10px; height: 10px; margin-top: 8px; border-radius: 50%; background: var(--body-shade); }
 .about-credits { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--ink-soft); line-height: 1.5; }
 .about-credits strong { color: var(--ink); font-weight: 500; }
+.about-credits a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--body-shade); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 
 /* The logo opens About; a quiet text link does the same on the How to play page. */
 .logo-btn { flex: none; display: grid; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 8px; }
@@ -727,6 +728,7 @@ kbd {
 .mic-help-title { margin: 0 0 10px; font-weight: 600; }
 .mic-steps { margin: 0; padding-left: 22px; display: grid; gap: 8px; line-height: 1.5; }
 .mic-help-note { margin: 12px 0 0; color: var(--ink-soft); font-size: 0.9rem; }
+.mic-help-note:empty { display: none; }
 .listen-body { width: min(620px, 100%); }
 
 .listen-options { justify-items: center; gap: 14px; margin-bottom: 4px; }
