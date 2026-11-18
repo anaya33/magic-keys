@@ -51,6 +51,12 @@ export class MagicMode {
     return this.autoplayTimer !== null;
   }
 
+  /** The notes the next press will play (what a "right" key would be). */
+  get nextNotes(): number[] {
+    const step = this.song.steps[this.atEnd ? 0 : this.index];
+    return step ? step.notes.map((n) => n.midi) : [];
+  }
+
   /** Index of the next step to play. */
   get position(): number {
     return this.index;
@@ -74,6 +80,13 @@ export class MagicMode {
       // The sound rings for its written length, longer if the score's pedal holds it.
       this.later(note.sounding, () => piano.noteOff(note.midi));
     }
+    this.afterStep();
+  }
+
+  /** The player missed this note (tiles view, on tempo): move on without playing it. */
+  skip(): void {
+    if (this.atEnd) return;
+    this.index++;
     this.afterStep();
   }
 

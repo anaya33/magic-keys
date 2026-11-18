@@ -46,7 +46,6 @@ export class ListenView {
         <div class="listen-meter" aria-hidden="true">${'<span></span>'.repeat(BARS)}</div>
         <button class="listen-btn"></button>
         <div class="listen-actions"></div>
-        <p class="listen-privacy">Your recording is turned into notes right here, on this device. The audio is never uploaded or kept.</p>
       </div>`;
     document.body.append(this.el);
     this.status = this.el.querySelector('.listen-status')!;
@@ -138,7 +137,7 @@ export class ListenView {
         this.status.textContent = r.keyName
           ? `Found ${r.song.notes.length} notes in ${r.keyName}.`
           : `Found ${r.song.notes.length} notes.`;
-        this.detail.textContent = `Saved as “${r.song.title}” in your songs, on this device.`;
+        this.detail.textContent = `Saved as “${r.song.title}” in your songs.`;
         this.mainBtn.textContent = '';
         this.actions.append(
           this.action('Play it', () => this.openResult('magic'), true),

@@ -43,7 +43,6 @@ export class LibraryView {
         <p class="library-message" role="status" hidden></p>
         <div class="song-grid" data-grid="built-in"></div>
         <h3 class="library-subtitle">Your songs</h3>
-        <p class="library-note">Recordings and uploads are saved on this device only.</p>
         <div class="song-grid" data-grid="yours"></div>
       </div>
       <input type="file" accept=".musicxml,.xml,.mxl,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml" hidden />`;

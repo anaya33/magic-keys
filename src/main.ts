@@ -21,6 +21,7 @@ import { noteName } from './music/notes';
 import type { Song } from './music/types';
 import { LearnMode, type Hands } from './modes/learn';
 import { MagicMode } from './modes/magic';
+import { TilesGame } from './modes/tilesGame';
 import { celebrate } from './ui/celebrate';
 import { AboutView } from './ui/about';
 import { InstructionsCard } from './ui/instructions';
@@ -153,30 +154,96 @@ function start(): KeyboardView {
   const setProgress = (done: number, total: number) => {
     progressFill.style.transform = `scaleX(${total ? done / total : 0})`;
     counter.textContent = mode === 'learn' && total ? `${done} of ${total}` : '';
-    tiles.setPosition(done);
+    if (!tilesGame) tiles.setPosition(done); // while a tiles game runs, it moves the tiles itself
   };
 
-  // ---- phones held upright: piano tiles instead of sheet music + big keys
+  // ---- phones held upright: piano tiles, played on tempo (see modes/tilesGame.ts)
+  /**
+   * Tiles speed. Thumbs on glass can't keep up with a pianist's fingers, so each song
+   * plays its tiles at a comfortable tempo: its quick passages come at most about
+   * 3 taps a second, and never faster than written. Für Elise slows to ~60%;
+   * slow pieces like Gymnopédie keep their real tempo. Learn is never above 80%.
+   */
+  const COMFORTABLE_TAP_GAP = 0.33; // seconds between taps for the song's ordinary quick notes
+  const MIN_TAP_GAP = 0.24; // anything closer than this (after slowing down) plays itself
+  const comfortableSpeed = (times: number[]): number => {
+    const gaps = times
+      .slice(1)
+      .map((t, i) => t - times[i])
+      .filter((g) => g > 0.02)
+      .sort((a, b) => a - b);
+    // The song's ordinary quick notes (not its fastest runs, which play themselves).
+    const quickGap = gaps.length ? gaps[Math.floor(gaps.length * 0.25)] : 1;
+    return Math.min(1, Math.max(0.4, quickGap / COMFORTABLE_TAP_GAP));
+  };
+  /** Magic: which tiles are too quick to tap at this speed (they play themselves). */
+  const selfPlaying = (times: number[], speed: number): boolean[] => {
+    let lastTap = -Infinity;
+    return times.map((t) => {
+      if ((t - lastTap) / speed < MIN_TAP_GAP) return true;
+      lastTap = t;
+      return false;
+    });
+  };
+  let tilesGame: TilesGame | null = null;
   const tiles = new TilesView((lane) => {
     if (panelOpen()) return;
     instructions.hide();
-    if (mode === 'magic') return magicPress(0.72); // tap anywhere: the next note plays
-    if (mode !== 'learn' || !learn) return;
-    if (lane === tiles.currentLane) learn.playCurrent();
-    else tiles.wiggleCurrent(); // wrong lane: the waiting tile shakes, no harsh sound
+    if (tilesGame) return tilesGame.tap(lane);
+    if (mode === 'magic') magic?.stopAutoplay(); // a tap during Autoplay hands the tiles back to you
   });
   $('.tiles-slot').append(tiles.el);
 
-  /** Rebuild the tile column for the current mode and song. */
+  /** Rebuild the tile column for the current mode and song, and start keeping time. */
   const refreshTiles = () => {
-    if (mode === 'magic' && song && magic) {
-      tiles.setTiles(song.steps.map((st) => ({ top: Math.max(...st.notes.map((n) => n.midi)) })), magic.position);
+    tilesGame?.stop();
+    tilesGame = null;
+    if (!tilesQuery.matches || !song) return; // tiles only exist on an upright phone
+    if (mode === 'magic' && magic) {
+      const times = song.steps.map((st) => st.start);
+      const speed = comfortableSpeed(times);
+      const auto = selfPlaying(times, speed);
+      tiles.setTiles(
+        song.steps.map((st, i) => ({ top: Math.max(...st.notes.map((n) => n.midi)), time: st.start, auto: auto[i] })),
+        magic.position,
+      );
+      if (magic.autoplaying) return; // Autoplay moves the tiles; the game starts again after it
+      const m = magic;
+      tilesGame = new TilesGame({
+        view: tiles,
+        strict: true,
+        speed,
+        auto,
+        startIndex: m.position,
+        onHit: () => m.playNext(0.72),
+        onMiss: () => m.skip(),
+        onFinish: (hits, total) =>
+          celebrate(`You hit ${hits} of ${total} notes on time!`, () => {
+            m.restart();
+            refreshTiles();
+          }),
+      });
     } else if (mode === 'learn' && learn) {
-      const tileList = learn.targetNotes.map((group) => ({
-        top: Math.max(...group),
-        label: group.map((m) => noteName(m, false)).join(' '),
-      }));
-      tiles.setTiles(tileList, learn.position);
+      const l = learn;
+      const times = l.targetTimes;
+      tiles.setTiles(
+        l.targetNotes.map((group, i) => ({
+          top: Math.max(...group),
+          time: times[i],
+          label: group.map((midi) => noteName(midi, false)).join(' '),
+        })),
+        l.position,
+      );
+      const speed = Math.min(0.8, comfortableSpeed(times));
+      tilesGame = new TilesGame({
+        view: tiles,
+        strict: false,
+        speed,
+        startIndex: l.position,
+        onHit: () => l.playCurrent(0.72, 1 / speed),
+        onMiss: () => {},
+        onFinish: () => {}, // Learn mode celebrates by itself
+      });
     }
   };
 
@@ -241,6 +308,7 @@ function start(): KeyboardView {
       progress: setProgress,
       position: (beat) => sheet.goTo(beat),
       autoplayChanged: (playing) => {
+        refreshTiles(); // Autoplay drives the tiles; afterwards the tempo game picks up where it stopped
         autoplayBtn.classList.toggle('is-on', playing);
         autoplayBtn.innerHTML = `${playing ? ICONS.pause : ICONS.play}<span>${playing ? 'Pause' : 'Autoplay'}</span>`;
       },
@@ -312,7 +380,17 @@ function start(): KeyboardView {
   const press = (midi: number, velocity: number) => {
     if (panelOpen()) return; // the piano rests while you browse songs or record
     instructions.hide();
-    if (mode === 'magic') return magicPress(velocity);
+    if (mode === 'magic') {
+      // Phone held sideways: if you tap a key that isn't the next note, the music still
+      // plays (it's magic), and the right key shakes its head so you learn where it is.
+      const expected = magic?.nextNotes ?? [];
+      magicPress(velocity);
+      const phoneSideways = phoneQuery.matches && !tilesQuery.matches;
+      if (phoneSideways && expected.length && !expected.includes(midi)) {
+        for (const right of expected) keyboard.wiggle(right);
+      }
+      return;
+    }
     keyboard.setHighlight(midi, 'you', true);
     if (mode === 'learn') return learn?.press(midi, velocity);
     keyboard.ensureVisible([midi]);
@@ -338,28 +416,70 @@ function start(): KeyboardView {
   });
   $('.piano-body').append(keyboard.el);
 
-  // The piano takes up to about 45% of the screen height; the music card gets the rest.
   // Three layouts:
   //  - "tiles": a phone held upright. A short piano strip on top, falling tiles below.
-  //  - short screens (phone landscape): the piano gets everything below the control row.
+  //  - short screens (a phone held sideways): the full piano gets everything below the
+  //    control row, measured from the real layout so nothing is ever cut off.
   //  - everything else: sheet music in the middle, the piano takes about 45% of the height.
   const tilesQuery = window.matchMedia('(orientation: portrait) and (max-width: 700px)');
   // A real phone (touch screen, no mouse). Only then do we suggest turning it sideways.
   const phoneQuery = window.matchMedia('(hover: none) and (pointer: coarse)');
+  const topbar = $<HTMLElement>('.topbar');
+
+  /** The visible screen height (on phones this excludes the browser's toolbars). */
+  const screenHeight = () => window.visualViewport?.height ?? window.innerHeight;
+
+  /** Room for the playing keys below the control row on a short (landscape) screen. */
+  const keysRoomBelowTopbar = () => {
+    const playStyle = getComputedStyle(playEl);
+    const bottomPadding = parseFloat(playStyle.paddingBottom) || 0; // includes the home-bar safe area
+    const rowGap = parseFloat(playStyle.rowGap) || 0;
+    const body = $<HTMLElement>('.piano-body');
+    const bodyStyle = getComputedStyle(body);
+    const bodyChrome = (parseFloat(bodyStyle.paddingTop) || 0) + (parseFloat(bodyStyle.paddingBottom) || 0);
+    const overview = body.querySelector<HTMLElement>('.overview');
+    const overviewSpace = overview ? overview.offsetHeight + (parseFloat(getComputedStyle(overview).marginBottom) || 0) : 0;
+    return screenHeight() - topbar.getBoundingClientRect().bottom - rowGap - bottomPadding - bodyChrome - overviewSpace - 2;
+  };
+
   const fitToScreen = () => {
     const tilesLayout = tilesQuery.matches;
     playEl.dataset.phone = String(phoneQuery.matches);
-    const shortScreen = window.innerHeight <= 520;
+    const shortScreen = screenHeight() <= 520;
     const wasTiles = playEl.dataset.layout === 'tiles';
     playEl.dataset.layout = tilesLayout ? 'tiles' : 'wide';
+    if (wasTiles && !tilesLayout) refreshTiles(); // turned sideways: stop the tiles clock
     keyboard.setTargetKeyWidth(keyWidthForScreen());
-    if (tilesLayout) keyboard.setMaxHeight(mode === 'free' ? window.innerHeight * 0.45 : 120);
-    else keyboard.setMaxHeight(Math.max(110, shortScreen ? window.innerHeight - 112 : window.innerHeight * 0.42 - 60));
+    if (tilesLayout) keyboard.setMaxHeight(mode === 'free' ? screenHeight() * 0.45 : 120);
+    else if (shortScreen) keyboard.setMaxHeight(Math.max(90, keysRoomBelowTopbar()));
+    else keyboard.setMaxHeight(Math.max(110, screenHeight() * 0.42 - 60));
     if (tilesLayout && !wasTiles) refreshTiles();
   };
   fitToScreen();
   keyboard.layoutNow(); // draw the keys before the first frame is shown
-  window.addEventListener('resize', fitToScreen);
+
+  /**
+   * Re-fit whenever the screen changes. Turning a phone is caught three ways (the
+   * orientation media query, the orientation event and the visible-area resize),
+   * whichever fires first. Some iPhones report the old size at the very first signal,
+   * so we check again twice in the next half-second; each check is cheap.
+   */
+  const refit = () => {
+    fitToScreen();
+    keyboard.layoutNow();
+  };
+  const refitAfterRotation = () => {
+    refit();
+    requestAnimationFrame(refit);
+    window.setTimeout(refit, 150);
+    window.setTimeout(refit, 450);
+  };
+  window.addEventListener('resize', refit);
+  window.visualViewport?.addEventListener('resize', refit);
+  tilesQuery.addEventListener('change', refitAfterRotation);
+  phoneQuery.addEventListener('change', refit);
+  window.addEventListener('orientationchange', refitAfterRotation);
+  screen.orientation?.addEventListener('change', refitAfterRotation);
 
   // ---- instructions: full screen on the first visit, reopened with the "?" button
   const about = new AboutView();
@@ -420,6 +540,22 @@ function start(): KeyboardView {
   void restoreYourSongs(); // bring back recordings and uploads saved on this device
   return keyboard;
 }
+
+/**
+ * Phones: the app is a fixed instrument, so it never zooms. The viewport tag asks
+ * for that, but iOS Safari ignores it, so pinch gestures are blocked here too
+ * (double-tap zoom is turned off in CSS with touch-action: manipulation).
+ */
+for (const gesture of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(gesture, (e) => e.preventDefault(), { passive: false });
+}
+document.addEventListener(
+  'touchmove',
+  (e) => {
+    if (e.touches.length > 1 && !(e.target as HTMLElement).closest('.keyboard-keys, .tiles')) e.preventDefault();
+  },
+  { passive: false },
+);
 
 /**
  * Keep the piano on the device for instant repeat visits and offline play.

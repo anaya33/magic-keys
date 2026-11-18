@@ -63,6 +63,11 @@ export class LearnMode {
     return this.targets.map((t) => t.notes.map((n) => n.midi));
   }
 
+  /** When each target is due in the song, in seconds at the written tempo. */
+  get targetTimes(): number[] {
+    return this.targets.map((t) => t.step.start);
+  }
+
   /** Index of the target waiting to be played. */
   get position(): number {
     return this.index;
@@ -71,19 +76,20 @@ export class LearnMode {
   /**
    * Play the whole current target in one go (the tiles view: tapping the right lane
    * counts as pressing every note of that tile). Notes ring for their written length.
+   * `stretch` slows the left-hand accompaniment to match a slower practice tempo.
    */
-  playCurrent(velocity = 0.72): void {
+  playCurrent(velocity = 0.72, stretch = 1): void {
     if (this.done) this.restart();
     const target = this.targets[this.index];
     for (const note of target.notes) {
       piano.noteOn(note.midi, velocity);
       this.view.light(note.midi, true);
-      this.later(note.sounding, () => {
+      this.later(note.sounding * stretch, () => {
         piano.noteOff(note.midi);
         this.view.light(note.midi, false);
       });
     }
-    this.advance();
+    this.advance(stretch);
   }
 
   /** A key went down. Returns nothing: Learn mode plays the sound itself. */
@@ -134,9 +140,9 @@ export class LearnMode {
     }
   }
 
-  private advance(): void {
+  private advance(stretch = 1): void {
     const target = this.targets[this.index];
-    this.accompany(target);
+    this.accompany(target, stretch);
     this.index++;
     this.present();
     if (this.done) this.view.finished();
@@ -146,13 +152,13 @@ export class LearnMode {
    * Right-hand practice: play the left-hand notes that belong with this target, and
    * the ones written between this target and the next, at their written timing.
    */
-  private accompany(target: Target): void {
+  private accompany(target: Target, stretch = 1): void {
     if (this.hands === 'both') return;
     const next = this.targets[this.index + 1];
     const endIndex = next ? next.stepIndex : this.song.steps.length;
     for (let i = target.stepIndex; i < endIndex; i++) {
       const step = this.song.steps[i];
-      const delay = step.start - target.step.start;
+      const delay = (step.start - target.step.start) * stretch;
       for (const note of step.notes) {
         if (target.notes.includes(note)) continue;
         this.later(delay, () => {
@@ -160,7 +166,7 @@ export class LearnMode {
           this.accompanying.add(note.midi);
           this.view.light(note.midi, true);
         });
-        this.later(delay + note.sounding, () => {
+        this.later(delay + note.sounding * stretch, () => {
           piano.noteOff(note.midi);
           this.accompanying.delete(note.midi);
           this.view.light(note.midi, false);
