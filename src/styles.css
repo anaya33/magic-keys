@@ -704,6 +704,56 @@ kbd {
 .listen-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .listen-actions:empty { display: none; }
 
+/* Listen: parts that only show in some states (data-show="idle", "listening counting", "done"). */
+.listen [data-show] { display: none; }
+.listen[data-state='idle'] [data-show~='idle'] { display: grid; }
+.listen[data-state='counting'] [data-show~='counting'],
+.listen[data-state='listening'] [data-show~='listening'] { display: grid; }
+.listen[data-state='counting'] .listen-meter,
+.listen[data-state='listening'] .listen-meter { display: flex; }
+.listen[data-state='done'] [data-show~='done'] { display: flex; }
+.listen-body { width: min(620px, 100%); }
+
+.listen-options { justify-items: center; gap: 14px; margin-bottom: 4px; }
+.click-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.bpm { display: inline-flex; align-items: center; gap: 8px; }
+.bpm[hidden] { display: none; }
+.bpm-label { min-width: 64px; text-align: center; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* The note you're singing right now: big, with a flat tuning bar (flat ← in tune → sharp). */
+.live { justify-items: center; gap: 10px; width: 100%; }
+.live-note {
+  font-size: clamp(3rem, 12vw, 5rem); font-weight: 500; letter-spacing: -0.03em; line-height: 1;
+  min-width: 3ch; text-align: center; font-variant-numeric: tabular-nums;
+}
+.tuning { position: relative; width: min(260px, 70vw); height: 10px; border-radius: 999px; background: var(--ivory); }
+.tuning-mark { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; background: var(--ivory-edge); transform: translateX(-50%); }
+.tuning-needle {
+  position: absolute; top: -4px; left: 50%;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--ink-soft);
+  transform: translateX(-50%);
+  transition: transform 90ms linear, background 120ms ease;
+}
+.listen.is-in-tune .tuning-needle { background: var(--body-shade); }
+.listen[data-kind='instrument'] .live-note,
+.listen[data-kind='instrument'] .tuning { display: none; }
+.live-piano { width: min(560px, 100%); }
+.live-piano .overview { display: none; }
+.live-piano .keyboard-keys { border-radius: 8px; }
+
+/* Result: the sheet music of what you sang, on paper. */
+.listen-sheet {
+  width: 100%;
+  height: 190px;
+  background: var(--paper-sheet);
+  border-radius: 14px;
+  box-shadow: 0 0 0 1.5px var(--paper-edge), 0 5px 0 var(--paper-edge);
+  overflow: hidden;
+  margin: 8px 0 10px;
+}
+.listen-sheet .sheet { flex: 1; }
+
 /* ------------------------------------------------------------------ celebration */
 
 .celebration {
@@ -792,7 +842,7 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
   .panel:not([hidden]), .panel:not([hidden]) > *, .sheet-placeholder p { animation: none; }
-  .key-cap, .icon-btn, .close-btn, .pill, .pill-btn, .pedal-tag, .progress-fill, .keyboard-track.is-sliding, .song-btn, .song-card, .tile.is-animated, .listen-btn, .listen-meter span { transition: none; }
+  .key-cap, .icon-btn, .close-btn, .pill, .pill-btn, .pedal-tag, .progress-fill, .keyboard-track.is-sliding, .song-btn, .song-card, .tile.is-animated, .listen-btn, .listen-meter span, .tuning-needle { transition: none; }
   .tile.wiggle { animation: none; }
   .confetti { display: none; }
   .key.wiggle .key-cap { animation: none; }

@@ -15,28 +15,23 @@
  *  5. Keep the main melody and simple chords: notes that start together form a group;
  *     its top note is the melody, up to two notes close below it make a chord, and one
  *     low note can be the bass (left hand). Everything else is dropped.
- *  6. Find the beat from the gaps between notes and line everything up on a
- *     sixteenth-note grid, so it can be written as real sheet music.
+ *
+ * The rhythm (beat, triplets, note lengths) is worked out afterwards, in rhythm.ts.
  */
+import type { TimedNote } from './rhythm';
 import type { RawNote } from './transcribe';
 
-/** A cleaned-up note on the sixteenth-note grid. */
-export interface GridNote {
-  midi: number;
-  start: number; // in sixteenths from the beginning
-  length: number; // in sixteenths
-  staff: 1 | 2; // 1 = melody and chords (right hand), 2 = bass (left hand)
-  amplitude: number;
-}
-
-export interface CleanResult {
-  notes: GridNote[];
-  qpm: number; // tempo, quarter notes per minute
+export interface KeyInfo {
   fifths: number; // key signature: sharps (+) or flats (−)
   keyName: string; // e.g. "A minor"
   /** True when there were enough notes to trust the key name. */
   keyConfident: boolean;
 }
+
+export interface CleanResult extends KeyInfo {
+  notes: TimedNote[];
+}
+
 
 const MIN_DURATION = 0.12; // seconds
 const TOGETHER = 0.07; // seconds: notes this close count as starting together
@@ -89,25 +84,28 @@ export function cleanUp(raw: RawNote[]): CleanResult {
     if (bass) kept.push({ note: bass, staff: 2, groupStart: group[0].start });
   }
 
-  // 6. Beat and grid.
-  const onsets = groups.map((g) => g[0].start);
-  const beat = estimateBeat(onsets);
-  const sixteenth = beat / 4;
-  const origin = onsets[0];
-  const grid: GridNote[] = kept.map(({ note, staff, groupStart }) => ({
-    midi: note.midi,
-    staff,
-    amplitude: note.amplitude,
-    start: Math.round((groupStart - origin) / sixteenth),
-    length: Math.max(1, Math.round(note.duration / sixteenth)),
-  }));
-
   return {
-    notes: tidyGrid(grid),
-    qpm: Math.round(60 / beat),
+    notes: kept.map(({ note, staff, groupStart }) => ({
+      midi: note.midi,
+      staff,
+      amplitude: note.amplitude,
+      start: groupStart,
+      duration: note.duration,
+    })),
+    ...keyInfo(key, notes.length),
+  };
+}
+
+/** Key signature and name for a set of notes (used for voice recordings too). */
+export function describeKey(notes: { midi: number; duration: number; amplitude: number }[]): KeyInfo {
+  return keyInfo(detectKey(notes), notes.length);
+}
+
+function keyInfo(key: { tonic: number; minor: boolean }, noteCount: number): KeyInfo {
+  return {
     fifths: key.minor ? MAJOR_FIFTHS[(key.tonic + 3) % 12] : MAJOR_FIFTHS[key.tonic],
     keyName: `${NAMES[key.tonic]} ${key.minor ? 'minor' : 'major'}`,
-    keyConfident: notes.length >= 16,
+    keyConfident: noteCount >= 16,
   };
 }
 
@@ -139,7 +137,7 @@ function mergeFlickers(notes: RawNote[]): RawNote[] {
  * tune that lingers on G isn't called G major), then settle major vs minor by which
  * third (minor or major) is actually heard.
  */
-function detectKey(notes: RawNote[]): { tonic: number; minor: boolean } {
+function detectKey(notes: { midi: number; duration: number; amplitude: number }[]): { tonic: number; minor: boolean } {
   const weight = new Array(12).fill(0);
   for (const n of notes) weight[((n.midi % 12) + 12) % 12] += n.duration * n.amplitude;
   const total = weight.reduce((s, w) => s + w, 0) || 1;
@@ -204,47 +202,7 @@ function groupByOnset(notes: RawNote[]): RawNote[][] {
   return groups;
 }
 
-/**
- * The beat (seconds per quarter note), from the typical gap between notes.
- * The most common gap is usually an eighth or a quarter, so we take the median gap
- * and double or halve it into a comfortable tempo range (about 65–150 bpm).
- */
-function estimateBeat(onsets: number[]): number {
-  const gaps = onsets
-    .slice(1)
-    .map((t, i) => t - onsets[i])
-    .filter((g) => g > 0.08 && g < 2);
-  let beat = gaps.length ? percentile(gaps, 0.5) : 0.6;
-  while (beat < 0.4) beat *= 2;
-  while (beat > 0.92) beat /= 2;
-  return beat;
-}
 
-/**
- * Make each hand readable as sheet music: one line per staff, so a note ends
- * when the next one in its staff begins; chord notes share their group's length;
- * duplicates are removed.
- */
-function tidyGrid(notes: GridNote[]): GridNote[] {
-  const out: GridNote[] = [];
-  for (const staff of [1, 2] as const) {
-    const inStaff = notes.filter((n) => n.staff === staff).sort((a, b) => a.start - b.start || b.midi - a.midi);
-    const starts = [...new Set(inStaff.map((n) => n.start))].sort((a, b) => a - b);
-    for (const start of starts) {
-      const group = inStaff.filter((n) => n.start === start);
-      const next = starts.find((s) => s > start);
-      let length = group[0].length; // the top note decides the chord's length
-      if (next !== undefined) length = Math.min(length, next - start);
-      const seen = new Set<number>();
-      for (const n of group) {
-        if (seen.has(n.midi)) continue;
-        seen.add(n.midi);
-        out.push({ ...n, length: Math.max(1, Math.min(length, 32)) });
-      }
-    }
-  }
-  return out.sort((a, b) => a.start - b.start || a.staff - b.staff || b.midi - a.midi);
-}
 
 function percentile(values: number[], p: number): number {
   if (values.length === 0) return 0;

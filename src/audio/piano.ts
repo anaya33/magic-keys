@@ -29,6 +29,7 @@
  */
 import type * as ToneLib from 'tone';
 import { toneName } from '../music/notes';
+import { preferPlaybackAudio } from './session';
 
 type Tone = typeof ToneLib;
 
@@ -95,8 +96,11 @@ export class PianoEngine {
    * If the piano is already built, this only un-pauses the audio engine.
    */
   unlock(): void {
-    if (this.tone) void this.tone.start();
-    else void this.preload().then(() => this.tone?.start()).catch((err) => console.warn(err));
+    preferPlaybackAudio(); // phones: play through the silent switch (see audio/session.ts)
+    if (this.tone) {
+      // Also wakes the engine after an interruption (a call, the app in the background).
+      if (this.tone.getContext().state !== 'running') void this.tone.start();
+    } else void this.preload().then(() => this.tone?.start()).catch((err) => console.warn(err));
   }
 
   private async build(): Promise<void> {

@@ -114,15 +114,12 @@ function start(): KeyboardView {
   const toast = $<HTMLDivElement>('.toast');
   const played = $<HTMLDivElement>('.played');
 
-  // ---- sound: build the piano now, in the background; un-pause it on the first interaction
+  // ---- sound: build the piano now, in the background; un-pause it on the first interaction,
+  // and wake it again on any later tap if a phone call or the background paused it.
   void piano.preload().catch((err) => console.warn(err));
-  const unlockOnce = () => {
-    piano.unlock();
-    window.removeEventListener('pointerdown', unlockOnce, true);
-    window.removeEventListener('keydown', unlockOnce, true);
-  };
-  window.addEventListener('pointerdown', unlockOnce, true);
-  window.addEventListener('keydown', unlockOnce, true);
+  const wakeAudio = () => piano.unlock();
+  window.addEventListener('pointerdown', wakeAudio, true);
+  window.addEventListener('keydown', wakeAudio, true);
 
   // ---- sheet music
   const sheet = new SheetView();
