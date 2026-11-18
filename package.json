@@ -1,0 +1,21 @@
+{
+  "name": "magic-keys",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@spotify/basic-pitch": "^1.0.1",
+    "fflate": "^0.8.2",
+    "opensheetmusicdisplay": "^2.2.1",
+    "tone": "14.7.77"
+  },
+  "devDependencies": {
+    "typescript": "5.4.5",
+    "vite": "5.4.11"
+  }
+}

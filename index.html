@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Magic Keys</title>
+    <meta name="description" content="A playful piano where magic fingers play real songs while you press any key." />
+    <meta name="theme-color" content="#87D0FB" />
+
+    <!-- App icon: the flat blue grand piano (favicon on desktop, home-screen icon on mobile) -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon-64.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Magic Keys" />
+
+    <!--
+      Fonts: Resoomie Sans (OFL, /fonts/OFL.txt), served from this site only.
+      Preloading starts the downloads together with the page, and the font rules
+      live here (not in the JS bundle) so they exist before anything is drawn.
+      The app stays hidden until the fonts are in (see main.ts), so a reload never
+      flashes a backup font and then jumps.
+    -->
+    <link rel="preload" href="/fonts/ResoomieSans-Regular.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/ResoomieSans-Medium.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/ResoomieSans-Semibold.woff2" as="font" type="font/woff2" crossorigin />
+    <style>
+      @font-face { font-family: 'Resoomie Sans'; font-weight: 400; font-display: block; src: url('/fonts/ResoomieSans-Regular.woff2') format('woff2'); }
+      @font-face { font-family: 'Resoomie Sans'; font-weight: 500; font-display: block; src: url('/fonts/ResoomieSans-Medium.woff2') format('woff2'); }
+      @font-face { font-family: 'Resoomie Sans'; font-weight: 600; font-display: block; src: url('/fonts/ResoomieSans-Semibold.woff2') format('woff2'); }
+      html, body { margin: 0; background: #fff; }
+      /* Hidden until fonts are ready; main.ts adds .is-ready (a timeout guarantees it always appears). */
+      #app { opacity: 0; }
+      #app.is-ready { opacity: 1; transition: opacity 120ms ease-out; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

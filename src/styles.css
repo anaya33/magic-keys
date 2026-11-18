@@ -1,0 +1,776 @@
+/*
+ * Magic Keys — flat, soft, toy-like, geometric.
+ * Solid colours only: no gradients, no gloss, no blurred shadows.
+ * Depth is always a flat, darker strip under a shape (keys, buttons and cards use the same trick).
+ *
+ * Performance: nothing animates on its own. The only motion is a short transform
+ * when something is pressed, which the browser runs on the GPU without re-layout.
+ */
+:root {
+  --body: #87d0fb;        /* piano body, primary brand blue */
+  --body-shade: #5fb3e0;  /* flat shading on the body */
+  --ivory: #f3eee3;       /* white keys, cards */
+  --ivory-edge: #ddd5c4;  /* front face of white keys and cards */
+  --ivory-line: #d9d1c0;  /* thin line between white keys */
+  --ebony: #33322d;       /* black keys */
+  --ebony-edge: #1f1e1b;  /* front face of black keys */
+  --ink: #33322d;         /* text */
+  --ink-soft: #77746b;
+  --paper: #ffffff;
+  --lit: #bfe6fd;         /* white key, lit */
+  --lit-black: #5fb3e0;   /* black key, lit */
+  --paper-sheet: #fffdf7; /* warm paper for the sheet music */
+  --paper-edge: #ebe4d4;  /* flat edge under the paper */
+  --control: 32px;        /* height of every control in the top bar */
+  font-family: 'Resoomie Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+.play { min-width: 0; overflow-x: clip; }   /* nothing may push the page wider than the screen */
+body { background: var(--paper); overscroll-behavior: none; }
+[hidden] { display: none !important; }
+
+/* ------------------------------------------------------------------ layout */
+
+/* Control row on top, the music card fills the middle, the piano sits at the bottom. */
+.play {
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 16px clamp(12px, 3vw, 40px);
+  gap: 14px;
+}
+
+/* Things that only belong to some modes: <x data-only="magic learn"> */
+.play[data-mode='magic'] [data-only]:not([data-only~='magic']),
+.play[data-mode='learn'] [data-only]:not([data-only~='learn']),
+.play[data-mode='free'] [data-only]:not([data-only~='free']) { display: none; }
+
+/* One row: logo · mode tabs · this mode's controls. Tabs stay in the exact centre. */
+.topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand img { flex: none; }
+
+/* Song picker: the current song's title with a little chevron. Opens the library. */
+.song-btn {
+  display: flex; align-items: center; gap: 8px;
+  min-width: 0; max-width: 260px;
+  height: var(--control); padding: 0 12px 0 12px;
+  font: inherit; font-size: 0.9rem; font-weight: 500; color: var(--ink);
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--ivory);
+  box-shadow: 0 3px 0 var(--ivory-edge);
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+}
+.song-btn svg { flex: none; width: 14px; height: 14px; fill: currentColor; }
+.song-btn svg:last-child { fill: none; color: var(--ink-soft); }
+.song-btn-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.song-btn:active { transform: translateY(3px); box-shadow: 0 0 0 var(--ivory-edge); }
+.song-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.music-card-head { cursor: pointer; }
+.music-card-head:focus-visible { outline: 2px solid var(--ink); outline-offset: -4px; border-radius: 12px; }
+.controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.counter {
+  position: absolute; right: 18px; bottom: 14px; z-index: 2;
+  font-size: 0.85rem; font-weight: 500; color: var(--ink-soft);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.counter:empty { display: none; }
+/* Free play: clear the notes you've played. */
+.clear-btn { position: absolute; top: 14px; right: 16px; z-index: 2; }
+
+/* Mode tabs: plain flat buttons; the active one is a raised ivory button. Nothing slides. */
+.tabs { display: flex; gap: 6px; }
+.tabs button {
+  font: inherit; font-size: 0.9rem; font-weight: 500; white-space: nowrap;
+  height: var(--control); padding: 0 16px;
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--ink-soft);
+}
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected='true'] {
+  background: var(--ivory);
+  color: var(--ink);
+  box-shadow: 0 3px 0 var(--ivory-edge);
+}
+.tabs button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* "Pedal" tag on the piano body: only there while the sustain pedal is held. */
+.pedal-tag {
+  position: absolute; top: -11px; right: 24px; z-index: 3;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em;
+  padding: 2px 10px; border-radius: 999px;
+  background: var(--ink); color: var(--paper);
+  opacity: 0; transform: translateY(4px);
+  transition: opacity 80ms ease-out, transform 80ms ease-out;
+  pointer-events: none;
+}
+.pedal-tag.is-down { opacity: 1; transform: translateY(0); }
+
+/* Pill-shaped button, with or without an icon (Autoplay, Right hand). Blue while on. */
+.pill-btn {
+  display: flex; align-items: center; gap: 8px;
+  height: var(--control); padding: 0 16px;
+  font: inherit; font-size: 0.85rem; font-weight: 500; color: var(--ink);
+  border: 0; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  background: var(--ivory);
+  box-shadow: 0 3px 0 var(--ivory-edge);
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+}
+.pill-btn:has(svg) { padding-left: 13px; }
+.pill-btn svg, .icon-btn svg { width: 14px; height: 14px; }
+.pill-btn svg { fill: currentColor; }
+.pill-btn:active { transform: translateY(3px); box-shadow: 0 0 0 var(--ivory-edge); }
+.pill-btn.is-on { background: var(--lit); box-shadow: 0 3px 0 var(--body-shade); }
+.pill-btn.is-on:active { box-shadow: 0 0 0 var(--body-shade); }
+.pill-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+/* ------------------------------------------------------------------ music card */
+
+/* The middle of the screen: sheet music (or your played notes in Free play). */
+/* A sheet of warm paper sitting on a flat darker edge, like a page on a music stand. */
+.music-card {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-sheet);
+  border-radius: 14px;
+  box-shadow: 0 0 0 1.5px var(--paper-edge), 0 6px 0 var(--paper-edge);
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+/* Printed-score header: title centred, composer on the right. */
+.music-card-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 12px;
+  padding: 16px 28px 0;
+  white-space: nowrap;
+}
+.song-title { grid-column: 2; font-weight: 500; font-size: clamp(1.1rem, 2vw, 1.45rem); letter-spacing: -0.01em; }
+.song-composer { grid-column: 3; justify-self: end; color: var(--ink-soft); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; }
+
+.sheet-slot { flex: 1; min-height: 0; display: flex; }
+.sheet {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;            /* scrolled by code, so the music glides under the cursor */
+  display: flex;
+  align-items: center;
+}
+.sheet-canvas { flex: none; }
+/* While the score is being drawn: flat placeholder staff lines, gently breathing. */
+.sheet { position: relative; }
+.sheet-placeholder {
+  position: absolute; inset: 0;
+  display: none; flex-direction: column; justify-content: center; gap: 22px;
+  padding: 0 28px;
+}
+.sheet.is-loading .sheet-placeholder { display: flex; }
+.sheet.is-loading .sheet-canvas { visibility: hidden; }
+.sheet-placeholder .staff { display: grid; gap: 7px; }
+.sheet-placeholder .staff span { height: 1.5px; background: var(--paper-edge); }
+.sheet-placeholder p { margin: 0; text-align: center; color: var(--ink-soft); font-size: 0.9rem; animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: 0.45; } }
+
+/* The notes being played turn the same blue as the keys they light up. */
+.sheet .is-current path,
+.sheet .is-current rect { fill: var(--body-shade); stroke: var(--body-shade); }
+.sheet.is-empty::after { content: 'Sheet music is not available for this song.'; color: var(--ink-soft); padding: 0 20px; }
+
+/* Free play: the notes you just played, as flat chips. */
+.played {
+  flex: 1;
+  display: flex; flex-wrap: wrap; align-content: center; justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  overflow: hidden;
+}
+.played-empty { color: var(--ink-soft); margin: 0; }
+.note-chip {
+  font-size: clamp(1rem, 2.4vw, 1.4rem); font-weight: 500;
+  min-width: 2.6em; text-align: center;
+  padding: 8px 12px; border-radius: 12px;
+  background: var(--ivory); box-shadow: 0 3px 0 var(--ivory-edge);
+}
+.note-chip:last-child { background: var(--lit); box-shadow: 0 3px 0 var(--body-shade); }
+
+/* Thin progress line along the bottom edge of the card. */
+.progress {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 5px;
+  background: var(--ivory);
+}
+.progress-fill {
+  height: 100%;
+  background: var(--body-shade);
+  transform: scaleX(0); transform-origin: left;
+  transition: transform 160ms ease-out;
+}
+
+/* Small flat note shown when a song ends in Magic mode. */
+.toast {
+  position: absolute; top: 12px; right: 16px;
+  z-index: 5;
+  background: var(--ivory); color: var(--ink);
+  font-size: 0.9rem; font-weight: 500;
+  padding: 8px 16px; border-radius: 999px;
+  box-shadow: 0 3px 0 var(--ivory-edge);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ piano */
+
+.stage { position: relative; }
+
+/* The blue piano body: a frame around the keys, like the front of the reference grand. */
+.piano-body {
+  position: relative;
+  width: 100%;
+  background: var(--body);
+  border-radius: 24px;
+  padding: 14px clamp(10px, 1.6vw, 20px) 18px;
+}
+
+/* ------------------------------------------------------------------ buttons */
+
+/* Round, flat button on a darker strip; pressing moves it down onto the strip. */
+.icon-btn, .close-btn {
+  font: inherit;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+}
+.icon-btn {
+  width: var(--control); height: var(--control);
+  font-weight: 600; font-size: 0.95rem; color: var(--ink);
+  background: var(--ivory);
+  box-shadow: 0 3px 0 var(--ivory-edge);
+}
+.icon-btn:active { transform: translateY(3px); box-shadow: 0 0 0 var(--ivory-edge); }
+
+/* A plain ✕: two rounded ink bars, no fill. A soft ivory circle appears on hover. */
+.close-btn {
+  position: absolute; top: 20px; right: 20px;
+  width: 48px; height: 48px;
+  background: transparent;
+}
+.close-btn span {
+  grid-area: 1 / 1;
+  width: 24px; height: 3px; border-radius: 3px;
+  background: var(--ink);
+  transform: rotate(45deg);
+}
+.close-btn span + span { transform: rotate(-45deg); }
+.close-btn:hover { background: var(--ivory); }
+.close-btn:active { transform: scale(0.92); }
+.icon-btn:focus-visible, .close-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+kbd {
+  font: inherit; font-weight: 500; font-size: 0.85em;
+  background: var(--paper); border-radius: 6px; padding: 1px 7px;
+  box-shadow: 0 2px 0 var(--ivory-edge);
+}
+
+/* ------------------------------------------------------------------ instructions (full screen) */
+
+.instructions {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--paper);
+  display: grid;
+  place-items: center;
+  padding: 72px 24px 32px;
+  overflow-y: auto;
+}
+.instructions-body { width: min(560px, 100%); }
+.instructions-title {
+  margin: 0 0 32px;
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 22px; }
+.steps li { display: flex; gap: 16px; align-items: baseline; font-size: clamp(1rem, 2.2vw, 1.2rem); line-height: 1.6; }
+.step-num {
+  flex: none;
+  width: 30px; height: 30px; border-radius: 8px;
+  display: inline-grid; place-items: center;
+  background: var(--ivory);
+  font-size: 0.9rem; font-weight: 600;
+  transform: translateY(-2px);
+}
+.instructions-foot { margin: 40px 0 0; color: var(--ink-soft); font-size: 0.95rem; }
+.instructions kbd { background: var(--ivory); }
+
+/* ------------------------------------------------------------------ keyboard */
+
+.keyboard {
+  --kw: 60px;                   /* white-key width, set from JS; everything scales from it */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* The full piano (all 88 keys) in one thin strip, with a frame around the part being shown. */
+.overview {
+  position: relative;
+  height: 30px;
+  margin-bottom: 14px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--ivory);
+  cursor: pointer;
+  touch-action: none;
+}
+.mini { position: absolute; top: 0; bottom: 0; }
+.mini-white { border-right: 1px solid var(--ivory-line); }
+.mini-black { bottom: 40%; background: var(--ebony); border-radius: 0 0 2px 2px; }
+.mini.is-lit { background: var(--body-shade); }
+.overview-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 2.5px solid var(--ink);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+/* The playing keys. Only a thin cream line shows between keys (no blue gaps). */
+.keyboard-keys {
+  position: relative;
+  width: 100%;
+  touch-action: none;           /* we handle every touch ourselves (multi-touch, glissando) */
+  background: var(--ivory-line);
+  border-radius: 4px 4px calc(var(--kw) * 0.2) calc(var(--kw) * 0.2);
+  overflow: hidden;
+  contain: layout paint;        /* key presses never cause re-layout outside the keyboard */
+}
+/* All 88 keys side by side; sliding it shows a different part of the piano. */
+.keyboard-track {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  will-change: transform;
+}
+.keyboard-track.is-sliding { transition: transform 240ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+
+.key {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  cursor: pointer;
+  --edge: clamp(5px, calc(var(--kw) * 0.14), 11px);   /* height of the flat front face */
+  --press: calc(var(--edge) * 0.75);                   /* how far a pressed key sinks */
+  --radius: calc(var(--kw) * 0.18);
+}
+/* Front face: a flat, darker strip at the bottom of the key. */
+.key::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--edge) + var(--radius));
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+/* Key top. It slides down over the front face when pressed. */
+.key-cap {
+  position: absolute;
+  inset: 0 0 var(--edge) 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  padding-bottom: calc(var(--kw) * 0.2);
+  transition: transform 90ms ease-out;
+}
+
+/* White keys sit 1px apart, so only a thin line shows between them. */
+.key-white { z-index: 1; }
+.key-white::before { left: 0.5px; right: 0.5px; background: var(--ivory-edge); }
+.key-white .key-cap {
+  left: 0.5px;
+  right: 0.5px;
+  background: var(--ivory);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.key-black { bottom: 38%; z-index: 2; --edge: clamp(4px, calc(var(--kw) * 0.1), 8px); --radius: calc(var(--kw) * 0.12); }
+.key-black::before { background: var(--ebony-edge); }
+.key-black .key-cap { background: var(--ebony); border-radius: 0 0 var(--radius) var(--radius); }
+
+/* Learn mode: the key to press next glows with a flat blue ring and its label. */
+.key-white.lit-target .key-cap { background: #e3f4fe; box-shadow: inset 0 0 0 3px var(--body-shade); }
+.key-black.lit-target .key-cap { background: var(--body-shade); }
+.key.lit-target .key-label { font-weight: 600; }
+
+/* Pressed: the cap sinks onto its front face and lights up. Instant down, quick up. */
+.key.is-pressed .key-cap { transform: translateY(var(--press)); transition-duration: 25ms; }
+.key-white.is-pressed .key-cap { background: var(--lit); }
+.key-black.is-pressed .key-cap { background: var(--lit-black); }
+
+.key-label {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-weight: 500; font-size: clamp(0.65rem, calc(var(--kw) * 0.2), 0.85rem); line-height: 1.1;
+  pointer-events: none;
+}
+.key-black .key-label { color: var(--ivory); }
+
+.key.wiggle .key-cap { animation: wiggle 300ms ease-out; }
+@keyframes wiggle {
+  0%, 100% { transform: translateX(0); }
+  30% { transform: translateX(-3px); }
+  65% { transform: translateX(3px); }
+}
+
+/* ------------------------------------------------------------------ portrait: piano tiles */
+
+/* Only the tiles layout (a phone held upright) shows the tiles and the turn hint. */
+.tiles-slot, .turn-hint { display: none; }
+
+.play[data-layout='tiles'] {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+.play[data-layout='tiles'][data-phone='true'] .turn-hint { display: flex; order: 1; }
+.play[data-layout='tiles'][data-phone='true'] { grid-template-rows: auto auto auto minmax(0, 1fr); }
+.play[data-layout='tiles'] .stage { order: 2; }
+.play[data-layout='tiles'] .tiles-slot { order: 3; display: flex; min-height: 0; }
+.play[data-layout='tiles'] .music-card { order: 3; }
+.play[data-layout='tiles']:not([data-mode='free']) .music-card { display: none; }
+.play[data-layout='tiles'][data-mode='free'] .tiles-slot { display: none; }
+.play[data-layout='tiles'] .piano-body { border-radius: 16px; padding: 8px 8px 10px; }
+.play[data-layout='tiles'] .overview { height: 18px; margin-bottom: 6px; }
+
+/* A small, cute hint: a little blue phone with a turn arrow. */
+.turn-hint {
+  align-items: center; justify-content: center; gap: 8px;
+  margin: 0;
+  font-size: 0.8rem; font-weight: 500; color: var(--ink-soft);
+}
+.turn-hint svg { width: 22px; height: 22px; flex: none; }
+
+/* The tiles field: four lanes on warm paper, a soft blue tap zone at the bottom. */
+.tiles {
+  --tile-h: 90px;
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  background: var(--paper-sheet);
+  border-radius: 18px;
+  box-shadow: 0 0 0 1.5px var(--paper-edge), 0 5px 0 var(--paper-edge);
+  margin-bottom: 5px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+.tiles-lanes { position: absolute; inset: 0; display: flex; }
+.tiles-lanes span { flex: 1; border-right: 1.5px solid var(--paper-edge); }
+.tiles-lanes span:last-child { border-right: 0; }
+.tiles-zone {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: calc(var(--tile-h) + 24px);
+  background: rgba(135, 208, 251, 0.22);
+  border-top: 2px solid var(--body);
+}
+.tiles-column { position: absolute; inset: 0; }
+
+/* A tile: a flat charcoal key shape, rounded like the black keys. */
+.tile {
+  position: absolute; top: 0;
+  height: var(--tile-h);
+  padding: 0 6px;
+  display: grid;
+  will-change: transform;
+}
+.tile::before {
+  content: '';
+  grid-area: 1 / 1;
+  border-radius: 14px;
+  background: var(--ebony);
+  box-shadow: 0 5px 0 var(--ebony-edge);
+}
+.tile span {
+  grid-area: 1 / 1;
+  place-self: end center;
+  margin-bottom: 12px;
+  color: var(--ivory);
+  font-weight: 600; font-size: 0.95rem;
+  pointer-events: none;
+}
+.tile.is-animated { transition: transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1), opacity 180ms ease-out; }
+/* The tile waiting in the tap zone turns blue, like a lit key. */
+.tile.is-next::before { background: var(--body-shade); box-shadow: 0 5px 0 #4a9fcf; }
+.tile.is-next span { color: var(--ink); }
+.tile.is-played { opacity: 0; }
+.tile.wiggle { animation: tile-wiggle 300ms ease-out; }
+@keyframes tile-wiggle {
+  0%, 100% { translate: 0 0; }
+  30% { translate: -6px 0; }
+  65% { translate: 6px 0; }
+}
+
+/* ------------------------------------------------------------------ full-screen panels */
+
+/* How to play, Songs, Listen and About all open the same gentle way: a quick fade
+   while the content rises a few pixels. One short animation, nothing that loops. */
+.panel:not([hidden]) { animation: panel-in 180ms ease-out; }
+.panel:not([hidden]) > :not(.close-btn) { animation: panel-rise 220ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+@keyframes panel-in { from { opacity: 0; } }
+@keyframes panel-rise { from { transform: translateY(10px); } }
+
+/* ------------------------------------------------------------------ About */
+
+.about {
+  position: fixed; inset: 0; z-index: 46;
+  background: var(--paper);
+  overflow-y: auto;
+  padding: 72px 24px 48px;
+}
+.about-body { width: min(620px, 100%); margin: 0 auto; }
+.about-icon { display: block; width: 88px; height: 88px; border-radius: 22px; margin-bottom: 8px; }
+.panel-title { margin: 0 0 12px; font-size: clamp(2rem, 5vw, 3rem); font-weight: 500; letter-spacing: -0.03em; }
+.about-lead { margin: 0; font-size: 1.1rem; line-height: 1.6; }
+.about-heading { margin: 36px 0 14px; font-size: 1.15rem; font-weight: 500; }
+.about-points { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.about-points li { display: flex; gap: 14px; line-height: 1.6; }
+.about-dot { flex: none; width: 10px; height: 10px; margin-top: 8px; border-radius: 50%; background: var(--body-shade); }
+.about-credits { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--ink-soft); line-height: 1.5; }
+.about-credits strong { color: var(--ink); font-weight: 500; }
+
+/* The logo opens About; a quiet text link does the same on the How to play page. */
+.logo-btn { flex: none; display: grid; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 8px; }
+.logo-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.link-btn {
+  font: inherit; color: var(--ink); padding: 0; border: 0; background: none; cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--body-shade); text-decoration-thickness: 2px; text-underline-offset: 3px;
+}
+
+/* ------------------------------------------------------------------ song library */
+
+.library {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: var(--paper);
+  overflow-y: auto;
+  padding: 72px 24px 40px;
+}
+.library.is-dropping { background: #f2f9fe; }
+.library-body { width: min(980px, 100%); margin: 0 auto; }
+.library-title { margin: 0 0 24px; font-size: clamp(2rem, 5vw, 3rem); font-weight: 500; letter-spacing: -0.03em; }
+.library-message { margin: -8px 0 20px; color: var(--ink-soft); }
+.library-message.is-error { color: #b0503f; }
+
+.song-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 18px;
+}
+/* A flat ivory card on a darker edge; it presses down like a key. */
+.song-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  min-height: 150px;
+  padding: 20px;
+  text-align: left;
+  font: inherit; color: var(--ink);
+  border: 0; border-radius: 20px; cursor: pointer;
+  background: var(--ivory);
+  box-shadow: 0 5px 0 var(--ivory-edge);
+  transition: transform 70ms ease-out, box-shadow 70ms ease-out;
+}
+.song-card:active { transform: translateY(5px); box-shadow: 0 0 0 var(--ivory-edge); }
+.song-card:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.song-card.is-current { background: var(--lit); box-shadow: 0 5px 0 var(--body-shade); }
+.song-card-title { font-size: 1.15rem; font-weight: 500; letter-spacing: -0.01em; line-height: 1.25; }
+.song-card-composer { color: var(--ink-soft); font-size: 0.9rem; line-height: 1.4; }
+.song-card-foot { margin-top: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 12px; }
+.difficulty { display: flex; align-items: center; gap: 4px; font-size: 0.8rem; font-weight: 500; color: var(--ink-soft); }
+.difficulty .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--paper); }
+.difficulty .dot.is-on { background: var(--ink); }
+.difficulty .dot:last-of-type { margin-right: 4px; }
+.tag { font-size: 0.75rem; font-weight: 500; padding: 3px 9px; border-radius: 999px; background: var(--paper); }
+.tag-now { background: var(--body-shade); color: var(--paper); }
+
+.library-subtitle { margin: 44px 0 4px; font-size: 1.4rem; font-weight: 500; letter-spacing: -0.01em; }
+.library-note { margin: 0 0 18px; color: var(--ink-soft); font-size: 0.9rem; }
+.song-card { position: relative; }
+
+/* Record and Upload: white cards with an ivory outline and a flat blue icon. */
+.action-card { background: var(--paper); box-shadow: 0 0 0 2px var(--ivory), 0 5px 0 var(--ivory); }
+.action-card:active { box-shadow: 0 0 0 2px var(--ivory), 0 0 0 var(--ivory); }
+.action-icon { width: 36px; height: 36px; border-radius: 50%; background: var(--body); margin-bottom: 6px; display: grid; place-items: center; }
+.action-icon .plus { grid-area: 1 / 1; width: 16px; height: 3px; border-radius: 3px; background: var(--ink); }
+.action-icon .plus-v { transform: rotate(90deg); }
+.action-icon .mic-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--ink); }
+
+/* Delete (your songs only): a small ✕ that turns into "Delete?" on the first tap. */
+.delete-btn {
+  position: absolute; top: 10px; right: 10px;
+  height: 28px; min-width: 28px; padding: 0 6px;
+  display: grid; place-items: center;
+  font: inherit; font-size: 0.8rem; font-weight: 600; color: var(--ink);
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: transparent;
+}
+.delete-btn:hover { background: var(--paper); }
+.delete-x { grid-area: 1 / 1; display: grid; place-items: center; width: 14px; height: 14px; }
+.delete-x span { grid-area: 1 / 1; width: 13px; height: 2px; border-radius: 2px; background: var(--ink-soft); transform: rotate(45deg); }
+.delete-x span + span { transform: rotate(-45deg); }
+.delete-ask { grid-area: 1 / 1; display: none; padding: 0 6px; }
+.delete-btn.is-asking { background: var(--ink); color: var(--paper); }
+.delete-btn.is-asking .delete-x { display: none; }
+.delete-btn.is-asking .delete-ask { display: block; }
+.delete-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.song-card:has(.delete-btn) .song-card-title { padding-right: 28px; }
+
+/* ------------------------------------------------------------------ Listen */
+
+.listen {
+  position: fixed; inset: 0; z-index: 45;
+  background: var(--paper);
+  display: grid; place-items: center;
+  padding: 72px 24px 32px;
+  overflow-y: auto;
+}
+.listen-body { width: min(520px, 100%); display: grid; justify-items: center; gap: 14px; text-align: center; }
+.listen-title { margin: 0; font-size: clamp(2rem, 5vw, 3rem); font-weight: 500; letter-spacing: -0.03em; }
+.listen-status { margin: 0; font-size: 1.1rem; line-height: 1.5; min-height: 1.5em; }
+.listen-detail { margin: 0; color: var(--ink-soft); min-height: 1.4em; font-variant-numeric: tabular-nums; }
+.listen-privacy { margin: 18px 0 0; color: var(--ink-soft); font-size: 0.85rem; line-height: 1.5; }
+
+/* Level meter: flat rounded bars that light up from the middle outwards. */
+.listen-meter { display: flex; align-items: center; gap: 5px; height: 56px; margin: 6px 0; }
+.listen-meter span { width: 8px; height: 14px; border-radius: 4px; background: var(--ivory); transition: height 80ms ease-out, background 80ms ease-out; }
+.listen-meter span.is-on { height: 48px; background: var(--body-shade); }
+.listen:not([data-state='listening']) .listen-meter { opacity: 0.5; }
+
+/* The big round Listen / Stop button: a flat blue disc on a darker edge. */
+.listen-btn {
+  width: 132px; height: 132px; border-radius: 50%;
+  font: inherit; font-size: 1.2rem; font-weight: 500; color: var(--ink);
+  border: 0; cursor: pointer;
+  background: var(--body);
+  box-shadow: 0 6px 0 var(--body-shade);
+  transition: transform 70ms ease-out, box-shadow 70ms ease-out;
+}
+.listen-btn:active { transform: translateY(6px); box-shadow: 0 0 0 var(--body-shade); }
+.listen-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+.listen[data-state='listening'] .listen-btn { background: var(--ink); color: var(--paper); box-shadow: 0 6px 0 var(--ebony-edge); }
+.listen[data-state='working'] .listen-btn,
+.listen[data-state='done'] .listen-btn,
+.listen[data-state='error'] .listen-btn { display: none; }
+.listen-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.listen-actions:empty { display: none; }
+
+/* ------------------------------------------------------------------ celebration */
+
+.celebration {
+  position: fixed; inset: 0; z-index: 40;
+  display: grid; place-items: center;
+  background: rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+}
+.celebration-card {
+  display: grid; justify-items: center; gap: 18px;
+  padding: 32px 40px;
+  background: var(--paper);
+  border: 2px solid var(--ivory);
+  border-radius: 24px;
+  box-shadow: 0 5px 0 var(--ivory);
+}
+.celebration-title { margin: 0; font-size: clamp(1.3rem, 3vw, 1.8rem); font-weight: 500; letter-spacing: -0.02em; text-align: center; }
+.confetti {
+  position: absolute; top: -20px;
+  width: 12px; height: 12px;
+  animation: confetti-fall 1.6s cubic-bezier(0.3, 0.6, 0.5, 1) forwards;
+}
+.confetti-dot { border-radius: 50%; }
+.confetti-square { border-radius: 3px; }
+.confetti-bar { width: 6px; height: 16px; border-radius: 3px; }
+@keyframes confetti-fall {
+  to { transform: translate(var(--drift), 105vh) rotate(var(--spin)); }
+}
+
+/* ------------------------------------------------------------------ screen sizes */
+
+/* Short screens (phones in landscape): the keys get all the room there is. */
+@media (max-height: 520px) {
+  .play { padding: 8px 12px; gap: 6px; }
+  .piano-body { border-radius: 18px; padding: 8px 10px 10px; }
+  .overview { height: 22px; margin-bottom: 8px; }
+  /* No room for sheet music: the control row on top, the piano fills the rest. */
+  .play { grid-template-rows: auto minmax(0, 1fr); gap: 8px; }
+  .music-card { display: none; }
+  .stage { align-self: end; }
+  .instructions { padding: 24px 24px 16px; }
+  .instructions-title { margin-bottom: 14px; }
+  .steps { gap: 8px; }
+  .instructions-foot { margin-top: 14px; }
+}
+
+/* Very narrow phones: Autoplay shows just its icon, tabs tighten up. */
+@media (max-width: 420px) {
+  #autoplay span { display: none; }
+  #autoplay { padding: 0 10px; }
+  .tabs { gap: 2px; }
+  .tabs button { padding: 0 10px; font-size: 0.85rem; }
+  .controls { gap: 6px; }
+}
+
+
+/* Narrow screens: logo shrinks to the icon, tabs and controls share the row. */
+@media (max-width: 900px) {
+  .topbar { grid-template-columns: auto 1fr auto; }
+  .tabs { justify-content: center; }
+  .song-btn { max-width: 170px; }
+}
+@media (max-width: 600px) {
+  /* Row 1: song button + this mode's controls. Row 2: the mode tabs, full width. */
+  .topbar { grid-template-columns: minmax(0, 1fr) auto; row-gap: 10px; }
+  .brand { grid-column: 1; grid-row: 1; }
+  .controls { grid-column: 2; grid-row: 1; }
+  .tabs { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+  .tabs button { flex: 1; }
+  .brand img { display: none; }
+  .song-btn { max-width: none; }
+  .tabs button { padding: 0 12px; white-space: nowrap; }
+  /* Score header stacks: title, then composer, both centred. */
+  .music-card-head { grid-template-columns: 1fr; justify-items: center; gap: 2px; padding: 14px 16px 0; }
+  .song-title, .song-composer { grid-column: 1; justify-self: center; }
+}
+
+/* Narrow screens: tighter top bar. */
+@media (max-width: 480px) {
+  .pill { padding: 0 10px; }
+  .brand { font-size: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel:not([hidden]), .panel:not([hidden]) > *, .sheet-placeholder p { animation: none; }
+  .key-cap, .icon-btn, .close-btn, .pill, .pill-btn, .pedal-tag, .progress-fill, .keyboard-track.is-sliding, .song-btn, .song-card, .tile.is-animated, .listen-btn, .listen-meter span { transition: none; }
+  .tile.wiggle { animation: none; }
+  .confetti { display: none; }
+  .key.wiggle .key-cap { animation: none; }
+}
