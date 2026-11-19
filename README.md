@@ -20,7 +20,7 @@ both hands.
 **Listen.** Play or hum something into the microphone. It's turned into notes
 and saved as a song you can play in the other modes.
 
-**Songs.** Für Elise, Moonlight Sonata (1st movement), Prelude in C Major,
+**Songs.** Für Elise, The Entertainer, Moonlight Sonata (1st movement), Prelude in C Major,
 Clair de Lune (opening) and Gymnopédie No. 1 (opening). You can also upload your
 own sheet music as MusicXML.
 

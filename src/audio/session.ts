@@ -29,12 +29,15 @@ function isAppleMobile(): boolean {
 }
 
 let silentLoop: HTMLAudioElement | null = null;
+/** True while the microphone is in use: taps must not switch the audio mode back. */
+let recording = false;
 
 /**
  * Ask for "playback" audio, so the piano plays even with the silent switch on.
  * Must run inside a tap or key press (the fallback starts an <audio> element).
  */
 export function preferPlaybackAudio(): void {
+  if (recording) return;
   const session = audioSession();
   if (session) {
     try {
@@ -53,6 +56,28 @@ export function preferPlaybackAudio(): void {
   void silentLoop.play().catch(() => {
     silentLoop = null; // try again on the next tap
   });
+}
+
+/**
+ * Switch the iPhone to "play-and-record" before asking for the microphone. In
+ * "playback" mode (what the piano uses) iOS refuses the microphone without ever
+ * showing the permission pop-up. preferPlaybackAudio() switches back afterwards.
+ */
+export function preferRecordingAudio(): void {
+  recording = true;
+  const session = audioSession();
+  if (!session) return;
+  try {
+    session.type = 'play-and-record';
+  } catch {
+    /* harmless */
+  }
+}
+
+/** The microphone is off again: back to "playback" so the piano is loud. */
+export function doneRecordingAudio(): void {
+  recording = false;
+  preferPlaybackAudio();
 }
 
 /** 0.1 s of silence as a tiny WAV, so nothing needs downloading. */

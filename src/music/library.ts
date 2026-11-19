@@ -20,7 +20,7 @@ const files = import.meta.glob(['/songs/*.musicxml', '/songs/*.xml'], {
 }) as Record<string, () => Promise<string>>;
 
 /** Built-in songs in a friendly order (anything not listed follows, by name). */
-const PREFERRED_ORDER = ['fur-elise', 'moonlight-sonata', 'clair-de-lune', 'gymnopedie-1', 'bach-prelude-in-c'];
+const PREFERRED_ORDER = ['fur-elise', 'the-entertainer', 'moonlight-sonata', 'clair-de-lune', 'gymnopedie-1', 'bach-prelude-in-c'];
 
 export interface SongInfo {
   id: string;

@@ -116,6 +116,7 @@ export class SheetView {
     // for a moment, and that moment must never hold the picture back.
     const ready = previewUrl ? this.showPreview(previewUrl) : Promise.resolve();
     this.loading = ready
+      .then(() => this.whenVisible())
       .then(() => this.render(musicXml))
       .catch((err) => {
         console.warn('Sheet music could not be drawn:', err);
@@ -145,6 +146,24 @@ export class SheetView {
       .catch(() => {
         img.hidden = true; // no picture for this song: the live score is drawn directly
       });
+  }
+
+  /**
+   * Resolves once the sheet music card is actually on screen. Phones hide it (tiles,
+   * or the full piano sideways), and drawing a score nobody can see would freeze the
+   * page for a moment, so it's drawn only if and when the card appears.
+   */
+  private whenVisible(): Promise<void> {
+    const visible = () => this.el.clientHeight > 0 && this.el.clientWidth > 0;
+    if (visible()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const watch = new ResizeObserver(() => {
+        if (!visible()) return;
+        watch.disconnect();
+        resolve();
+      });
+      watch.observe(this.el);
+    });
   }
 
   private async render(musicXml: string): Promise<void> {

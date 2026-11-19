@@ -12,7 +12,7 @@
  * The browser's voice processing (echo cancellation, noise suppression, auto gain) is
  * switched off: it is tuned for speech and smears musical notes.
  */
-import { preferPlaybackAudio } from '../audio/session';
+import { doneRecordingAudio, preferRecordingAudio } from '../audio/session';
 import type { KnownBeat } from './rhythm';
 import { pitchCandidates, rms } from './pitch';
 
@@ -75,13 +75,16 @@ export class Recorder {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('This browser cannot record audio. Try Chrome, Edge, Firefox or Safari.');
     }
+    preferRecordingAudio(); // iPhone: the microphone is only allowed in this audio mode
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
     } catch (err) {
+      doneRecordingAudio();
       const name = err instanceof DOMException ? err.name : '';
-      if (name === 'NotAllowedError' || name === 'SecurityError') throw new MicBlockedError();
+      // NotReadableError: the system (e.g. macOS privacy settings) or another app has it.
+      if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'NotReadableError') throw new MicBlockedError();
       if (name === 'NotFoundError') throw new Error('No microphone was found.');
       throw new Error('The microphone could not be started.');
     }
@@ -233,7 +236,7 @@ export class Recorder {
     this.stream = null;
     void this.ctx?.close();
     this.ctx = null;
-    preferPlaybackAudio(); // using the microphone changes the iPhone's audio mode; switch back
+    doneRecordingAudio(); // using the microphone changes the iPhone's audio mode; switch back
   }
 }
 

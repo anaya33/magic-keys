@@ -25,7 +25,7 @@ import type { Song } from '../music/types';
 import { KeyboardView } from './keyboard';
 import { SheetView } from './sheet';
 
-type State = 'idle' | 'ask' | 'blocked' | 'counting' | 'listening' | 'working' | 'done' | 'error';
+type State = 'idle' | 'ask' | 'waiting' | 'blocked' | 'counting' | 'listening' | 'working' | 'done' | 'error';
 const BARS = 24;
 
 export class ListenView {
@@ -54,6 +54,8 @@ export class ListenView {
   private playbackBtn: HTMLButtonElement | null = null;
   /** We explain before the browser's pop-up only once per visit. */
   private explained = false;
+  /** Bumped on each Listen press, so a late microphone answer from a cancelled try is ignored. */
+  private attempt = 0;
   private stopWatchingMic: () => void = () => {};
 
   constructor(private onOpenSong: (song: Song, mode: 'magic' | 'learn') => void) {
@@ -83,7 +85,7 @@ export class ListenView {
           </div>
         </div>
 
-        <div class="mic-ask" data-show="ask" aria-hidden="true">
+        <div class="mic-ask" data-show="ask waiting" aria-hidden="true">
           <span class="mic-icon"><span class="mic-head"></span><span class="mic-stand"></span></span>
         </div>
 
@@ -178,6 +180,7 @@ export class ListenView {
   }
 
   hide(): void {
+    this.attempt++; // a microphone answer that arrives after closing is ignored
     this.stopWatchingMic();
     this.stopPlayback();
     if (this.state === 'listening' || this.state === 'counting') this.recorder.cancel();
@@ -197,13 +200,29 @@ export class ListenView {
         return this.setState('ask');
       }
     }
+    // Wait for the microphone before saying "Sing!": the browser may be showing its
+    // Allow pop-up, or the computer's own privacy settings may be holding it back.
+    const attempt = ++this.attempt;
+    this.setState('waiting');
+    const slow = window.setTimeout(() => {
+      if (this.state !== 'waiting' || attempt !== this.attempt) return;
+      const help = howToAllowMic();
+      this.status.textContent = 'Still waiting for the microphone.';
+      this.detail.textContent = help.steps[help.steps.length - 1] || help.steps[0];
+    }, 6000);
     try {
-      this.setState(this.clickOn ? 'counting' : 'listening');
       await this.recorder.start({ clickBpm: this.clickOn ? this.bpm : null, livePitch: this.kind === 'voice' });
+      clearTimeout(slow);
+      if (attempt !== this.attempt || this.state !== 'waiting') {
+        this.recorder.cancel(); // cancelled while waiting
+        return;
+      }
+      this.setState(this.clickOn ? 'counting' : 'listening');
       this.startedAt = performance.now();
       this.clock = window.setInterval(() => this.tickClock(), 250);
     } catch (err) {
-      this.fail(err);
+      clearTimeout(slow);
+      if (attempt === this.attempt) this.fail(err);
     }
   }
 
@@ -252,6 +271,17 @@ export class ListenView {
         this.status.textContent = 'Magic Keys needs your microphone to hear you.';
         this.detail.textContent = 'Your browser will ask next. Choose "Allow".';
         this.mainBtn.textContent = 'Allow microphone';
+        break;
+      case 'waiting':
+        this.status.textContent = 'Waiting for the microphone…';
+        this.detail.textContent = 'If your browser asks, choose "Allow".';
+        this.mainBtn.textContent = '';
+        this.actions.append(
+          this.action('Cancel', () => {
+            this.attempt++;
+            this.setState('idle');
+          }),
+        );
         break;
       case 'blocked': {
         const help = howToAllowMic();

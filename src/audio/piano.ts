@@ -26,6 +26,15 @@
  * Staying light on the computer:
  *  - At most MAX_RINGING notes ring at once; the oldest pedalled note is let go
  *    first, so mashing keys with the pedal down can never pile up hundreds of voices.
+ *  - A voice that would be nearly silent in the soft/bright blend isn't played.
+ *
+ * Phones get a lighter setup. Their audio runs on a much slower processor, and when
+ * it can't keep up the sound crackles, drops out and lags. Measured on a fast
+ * pedalled passage, the desktop setup uses about a quarter of a laptop's audio time;
+ * a phone is 3-5x slower. So on phones each note plays one voice (soft or bright, by
+ * how hard it's played) instead of a blend of two, the room reverb is shorter, and
+ * fewer notes ring at once: well under half the work, and it sounds the same on a
+ * phone speaker.
  */
 import type * as ToneLib from 'tone';
 import { toneName } from '../music/notes';
@@ -33,7 +42,9 @@ import { preferPlaybackAudio } from './session';
 
 type Tone = typeof ToneLib;
 
-const MAX_RINGING = 48;
+/** A touch-screen phone or tablet (no mouse): use the lighter sound setup. */
+const LIGHT = typeof matchMedia === 'function' && matchMedia('(hover: none) and (pointer: coarse)').matches;
+const MAX_RINGING = LIGHT ? 24 : 48;
 
 /** Sample files in /public/samples, one per minor third (A0, C1, Ds1, Fs1, A1 …). */
 function sampleFiles(): string[] {
@@ -122,7 +133,7 @@ export class PianoEngine {
 
     // Output chain: both voices -> room reverb -> gentle limiter -> speakers.
     const limiter = new Tone.Limiter(-1).toDestination();
-    const reverb = new Tone.Reverb({ decay: 2.4, preDelay: 0.012, wet: 0.16 }).connect(limiter);
+    const reverb = new Tone.Reverb({ decay: LIGHT ? 1.3 : 2.4, preDelay: 0.012, wet: LIGHT ? 0.13 : 0.16 }).connect(limiter);
     await reverb.ready;
     const mellow = new Tone.Filter({ type: 'lowpass', frequency: 1600, rolloff: -12, Q: 0.3 }).connect(reverb);
 
@@ -193,8 +204,17 @@ export class PianoEngine {
     const note = toneName(midi);
     const gain = velocityToGain(velocity);
     const brightness = Math.pow(Math.min(1, Math.max(0, velocity)), 1.3); // 0 mellow … 1 brilliant
-    this.soft.triggerAttack(note, time, gain * (1 - brightness * 0.85));
-    this.bright.triggerAttack(note, time, gain * brightness);
+    if (LIGHT) {
+      // One voice: the mellow one for gentle notes, the bright one for strong notes.
+      if (brightness < 0.45) this.soft.triggerAttack(note, time, gain);
+      else this.bright.triggerAttack(note, time, gain);
+      return;
+    }
+    const softGain = gain * (1 - brightness * 0.85);
+    const brightGain = gain * brightness;
+    // Skip a voice that would be too quiet to hear in the blend (saves work).
+    if (softGain > gain * 0.04) this.soft.triggerAttack(note, time, softGain);
+    if (brightGain > gain * 0.04) this.bright.triggerAttack(note, time, brightGain);
   }
 
   /** Too many notes ringing? Let go of the oldest ones nobody is holding. */

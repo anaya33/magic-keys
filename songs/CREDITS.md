@@ -12,5 +12,6 @@ Titles and credits were cleaned up for Magic Keys; the notes are unchanged excep
 | `bach-prelude-in-c.musicxml` | Bach, Prelude in C major, BWV 846 | [Abelio](https://musescore.com/user/19750301/scores/3872551) | Complete (Czerny edition) |
 | `clair-de-lune.musicxml` | Debussy, Clair de Lune | PDMX id `QmeMaKsVzm3njZN9ZSYwN7E9XQGC7fyyBsGMm1NnEt7H9m` | Opening, bars 1–30 |
 | `gymnopedie-1.musicxml` | Satie, Gymnopédie No. 1 | [Freb](https://musescore.com/freb/scores/6360221) | Bars 1–12; the source was a harp arrangement in C, restored here to Satie's original D major (these bars match the original note for note) |
+| `the-entertainer.musicxml` | Joplin, The Entertainer (1902) | [hiepdev](https://musescore.com/user/27342692/scores/5869612) | Complete; written in 4/4 with eighth notes (Joplin's 2/4 with sixteenths, same music) |
 
 To add a song, drop any `.musicxml` file into this folder. It shows up in the library automatically.

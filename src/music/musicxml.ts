@@ -51,6 +51,13 @@ interface RawMeasure {
   backwardRepeat: number; // how many times to play (0 = no repeat sign)
   endingStart: number[] | null; // e.g. [1] or [1, 2]
   endingStop: boolean;
+  /** Navigation marks (from <sound> attributes): D.S., D.C., the sign, To Coda, Coda, Fine. */
+  segno: boolean;
+  coda: boolean;
+  toCoda: boolean;
+  dalSegno: boolean;
+  daCapo: boolean;
+  fine: boolean;
 }
 
 export function parseMusicXml(xml: string, id: string): Song {
@@ -82,6 +89,12 @@ export function parseMusicXml(xml: string, id: string): Song {
         backwardRepeat: 0,
         endingStart: null,
         endingStop: false,
+        segno: false,
+        coda: false,
+        toCoda: false,
+        dalSegno: false,
+        daCapo: false,
+        fine: false,
       };
       let cursor = 0; // in divisions
       let lastNoteStart = 0;
@@ -99,6 +112,14 @@ export function parseMusicXml(xml: string, id: string): Song {
           case 'direction':
           case 'sound': {
             const sound = el.tagName === 'sound' ? el : el.querySelector('sound');
+            if (sound) {
+              if (sound.hasAttribute('segno')) raw.segno = true;
+              if (sound.hasAttribute('coda')) raw.coda = true;
+              if (sound.hasAttribute('tocoda')) raw.toCoda = true;
+              if (sound.hasAttribute('dalsegno')) raw.dalSegno = true;
+              if (sound.hasAttribute('dacapo')) raw.daCapo = true;
+              if (sound.hasAttribute('fine')) raw.fine = true;
+            }
             const tempo = Number(sound?.getAttribute('tempo'));
             if (tempo >= 20 && tempo <= 300) raw.tempos.push({ offset: cursor / divisions, qpm: tempo });
             const dyn = el.querySelector('dynamics > *');
@@ -250,17 +271,63 @@ export function parseMusicXml(xml: string, id: string): Song {
 }
 
 /**
- * The order bars are played in, unrolling repeat signs and 1st/2nd endings.
+ * The order bars are played in, unrolling repeat signs and 1st/2nd endings, then
+ * following D.S. / D.C. jumps: back to the sign (or the start), with no repeats the
+ * second time and only the last ending, on to the Coda at "To Coda" (whose own repeats
+ * are played), stopping at Fine.
  * e.g. |: A B [1. C :| [2. D  →  A B C A B D
  */
 function playingOrder(measures: RawMeasure[]): number[] {
+  const order = playRepeats(measures, 0, false);
+  if (!order.length) return order;
+  const jumpAt = order.findIndex((i) => measures[i].dalSegno || measures[i].daCapo);
+  if (jumpAt < 0) return order;
+  const jumpBar = measures[order[jumpAt]];
+  const target = jumpBar.dalSegno ? Math.max(0, measures.findIndex((m) => m.segno)) : 0;
+  const result = order.slice(0, jumpAt + 1);
+  const codaBar = measures.findIndex((m) => m.coda);
+  const secondTime = playRepeats(measures, target, true);
+  for (const i of secondTime) {
+    result.push(i);
+    if (measures[i].fine) return result;
+    if (measures[i].toCoda && codaBar > i) {
+      result.push(...playRepeats(measures, codaBar, false)); // the Coda plays its own repeats
+      return result;
+    }
+    if (i === order[jumpAt]) break; // reached the D.S. bar again without a coda: done
+  }
+  return result;
+}
+
+/**
+ * Bars in playing order from `from`, unrolling repeat signs and 1st/2nd endings. With
+ * `noRepeats` (the second time through, after a D.S.), repeats aren't taken and only the
+ * last ending of each set is played.
+ */
+function playRepeats(measures: RawMeasure[], from: number, noRepeats: boolean): number[] {
+  if (noRepeats) {
+    const order: number[] = [];
+    let skipping = false;
+    for (let i = from; i < measures.length; i++) {
+      const m = measures[i];
+      if (m.endingStart) {
+        // Skip this ending if another one follows right after it.
+        let j = i;
+        while (j < measures.length && !measures[j].endingStop) j++;
+        skipping = !!measures[j + 1]?.endingStart;
+      }
+      if (!skipping) order.push(i);
+      if (m.endingStop) skipping = false;
+    }
+    return order;
+  }
   const order: number[] = [];
-  let start = 0; // where the current repeat goes back to
+  let start = from; // where the current repeat goes back to
   let pass = 1; // which time through the repeated section we're on
   let skipping = false; // inside an ending that isn't for this pass
   const finished = new Set<number>(); // backward repeats already taken
   let guard = 0;
-  for (let i = 0; i < measures.length && guard++ < 10_000; ) {
+  for (let i = from; i < measures.length && guard++ < 10_000; ) {
     const m = measures[i];
     if (m.forwardRepeat && !(pass > 1 && i === start)) {
       start = i;

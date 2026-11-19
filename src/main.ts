@@ -35,9 +35,16 @@ type Mode = 'magic' | 'learn' | 'free';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
-/** Chunky keys on desktop and phone-landscape; narrower keys only in portrait. */
+/**
+ * A real phone or tablet: a touch screen and no mouse. Phone layouts (tiles, the
+ * sideways full piano) are only for these. A narrow or short desktop window keeps
+ * the desktop layout, however it's resized.
+ */
+const TOUCH_DEVICE = '(hover: none) and (pointer: coarse)';
+
+/** Chunky keys on desktop and phone-landscape; narrower keys only on an upright phone. */
 function keyWidthForScreen(): number {
-  if (window.matchMedia('(orientation: portrait)').matches) return 34;
+  if (window.matchMedia(`(orientation: portrait) and ${TOUCH_DEVICE}`).matches) return 34;
   if (window.innerWidth >= 1100) return 68;
   return 56;
 }
@@ -209,7 +216,11 @@ function start(): KeyboardView {
       const speed = comfortableSpeed(times);
       const auto = selfPlaying(times, speed);
       tiles.setTiles(
-        song.steps.map((st, i) => ({ top: Math.max(...st.notes.map((n) => n.midi)), time: st.start, auto: auto[i] })),
+        song.steps.map((st, i) => {
+          const top = Math.max(...st.notes.map((n) => n.midi));
+          // The melody note's name on each tile you play (the small self-playing ones stay blank).
+          return { top, time: st.start, auto: auto[i], label: auto[i] ? undefined : noteName(top, false) };
+        }),
         magic.position,
       );
       if (magic.autoplaying) return; // Autoplay moves the tiles; the game starts again after it
@@ -428,9 +439,9 @@ function start(): KeyboardView {
   //  - short screens (a phone held sideways): the full piano gets everything below the
   //    control row, measured from the real layout so nothing is ever cut off.
   //  - everything else: sheet music in the middle, the piano takes about 45% of the height.
-  const tilesQuery = window.matchMedia('(orientation: portrait) and (max-width: 700px)');
+  const tilesQuery = window.matchMedia(`(orientation: portrait) and (max-width: 700px) and ${TOUCH_DEVICE}`);
   // A real phone (touch screen, no mouse). Only then do we suggest turning it sideways.
-  const phoneQuery = window.matchMedia('(hover: none) and (pointer: coarse)');
+  const phoneQuery = window.matchMedia(TOUCH_DEVICE);
   const topbar = $<HTMLElement>('.topbar');
 
   /** The visible screen height (on phones this excludes the browser's toolbars). */
@@ -452,7 +463,7 @@ function start(): KeyboardView {
   const fitToScreen = () => {
     const tilesLayout = tilesQuery.matches;
     playEl.dataset.phone = String(phoneQuery.matches);
-    const shortScreen = screenHeight() <= 520;
+    const shortScreen = phoneQuery.matches && screenHeight() <= 520; // a phone held sideways
     const wasTiles = playEl.dataset.layout === 'tiles';
     playEl.dataset.layout = tilesLayout ? 'tiles' : 'wide';
     if (wasTiles && !tilesLayout) refreshTiles(); // turned sideways: stop the tiles clock
@@ -556,6 +567,23 @@ function start(): KeyboardView {
 for (const gesture of ['gesturestart', 'gesturechange', 'gestureend']) {
   document.addEventListener(gesture, (e) => e.preventDefault(), { passive: false });
 }
+// Double-tap zoom, belt and braces: a second tap within 350 ms never zooms. If that
+// second tap was on a button, it still counts as a click.
+let lastTouchEnd = 0;
+document.addEventListener(
+  'touchend',
+  (e) => {
+    const now = e.timeStamp;
+    const quick = now - lastTouchEnd < 350;
+    lastTouchEnd = now;
+    if (!quick || e.touches.length > 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('.keyboard-keys, .tiles, input, textarea, select')) return; // these handle their own touches
+    e.preventDefault();
+    target.closest<HTMLElement>('button, a, [role="button"], [role="tab"], label')?.click();
+  },
+  { passive: false },
+);
 document.addEventListener(
   'touchmove',
   (e) => {

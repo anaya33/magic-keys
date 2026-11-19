@@ -33,8 +33,12 @@
 html, body { margin: 0; height: 100%; }
 .play { min-width: 0; overflow-x: clip; }   /* nothing may push the page wider than the screen */
 body { background: var(--paper); overscroll-behavior: none; }
-/* Phones: no double-tap zoom anywhere (taps go straight to the app). */
-html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* Phones: no double-tap zoom anywhere (taps go straight to the app). Set on every
+   element, because Safari checks the element that was tapped; the keys and tiles
+   override it with touch-action: none. No text-selection magnifier on long press. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+*, *::before, *::after { touch-action: manipulation; }
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 [hidden] { display: none !important; }
 
 /* ------------------------------------------------------------------ layout */
@@ -716,7 +720,9 @@ kbd {
 .listen[data-state='done'] [data-show~='done'] { display: flex; }
 .listen[data-state='ask'] [data-show~='ask'],
 .listen[data-state='blocked'] [data-show~='blocked'] { display: grid; }
-.listen[data-state='blocked'] .listen-btn { display: none; }
+.listen[data-state='waiting'] [data-show~='waiting'] { display: grid; }
+.listen[data-state='blocked'] .listen-btn,
+.listen[data-state='waiting'] .listen-btn { display: none; }
 
 /* Asking for the microphone: a flat blue mic. */
 .mic-ask { justify-items: center; }
@@ -806,8 +812,9 @@ kbd {
 
 /* ------------------------------------------------------------------ screen sizes */
 
-/* Short screens (phones in landscape): the keys get all the room there is. */
-@media (max-height: 520px) {
+/* Phones held sideways: the keys get all the room there is. (Touch devices only: a
+   short desktop window keeps its sheet music.) */
+@media (max-height: 520px) and (hover: none) and (pointer: coarse) {
   .play {
     padding: max(8px, var(--safe-top)) max(12px, var(--safe-right)) max(8px, var(--safe-bottom)) max(12px, var(--safe-left));
     gap: 6px;
