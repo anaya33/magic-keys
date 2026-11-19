@@ -584,6 +584,8 @@ document.addEventListener(
   },
   { passive: false },
 );
+// Newer iPhones also turn a double-tap into a "double click" and zoom unless it's stopped.
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
 document.addEventListener(
   'touchmove',
   (e) => {
