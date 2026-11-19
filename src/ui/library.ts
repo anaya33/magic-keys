@@ -8,6 +8,7 @@
  * the first tap asks "Delete?"). Uploads accept MusicXML (.musicxml / .xml / .mxl),
  * the format every notation app can export; you can also drag a file onto the page.
  */
+import { isOn } from '../features';
 import { deleteYourSong, listSongs, songFromFile, type SongInfo } from '../music/library';
 import type { Song } from '../music/types';
 
@@ -97,10 +98,14 @@ export class LibraryView {
     const songs = await listSongs();
     this.builtInGrid.replaceChildren(...songs.filter((s) => !s.fromSession).map((s) => this.card(s)));
     this.yourGrid.replaceChildren(
-      this.actionCard('record', 'Record a song', 'Play or hum something. Listen turns it into notes.', () => {
-        this.hide();
-        this.handlers.onRecord();
-      }),
+      ...(isOn('listen')
+        ? [
+            this.actionCard('record', 'Record a song', 'Play or hum something. Listen turns it into notes.', () => {
+              this.hide();
+              this.handlers.onRecord();
+            }),
+          ]
+        : []),
       this.actionCard('upload', 'Upload sheet music', 'MusicXML (.musicxml, .xml, .mxl).', () => this.input.click()),
       ...songs.filter((s) => s.fromSession).map((s) => this.card(s)),
     );

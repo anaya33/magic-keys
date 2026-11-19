@@ -468,16 +468,35 @@ kbd {
 /* Only the tiles layout (a phone held upright) shows the tiles and the turn hint. */
 .tiles-slot, .turn-hint { display: none; }
 
+/* A phone held upright, laid out like a phone app: the song and this mode's controls
+   on top, the piano and the tiles in the middle, the mode tabs as a bar at the bottom
+   (where thumbs are). The top bar's parts become pieces of this grid. */
 .play[data-layout='tiles'] {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    'brand controls'
+    'stage stage'
+    'main main'
+    'hint hint'
+    'tabs tabs';
   gap: 10px;
-  padding: max(10px, var(--safe-top)) max(12px, var(--safe-right)) max(12px, var(--safe-bottom)) max(12px, var(--safe-left));
+  padding: max(10px, var(--safe-top)) max(12px, var(--safe-right)) max(10px, var(--safe-bottom)) max(12px, var(--safe-left));
 }
-.play[data-layout='tiles'][data-phone='true'] .turn-hint { display: flex; order: 1; }
-.play[data-layout='tiles'][data-phone='true'] { grid-template-rows: auto auto auto minmax(0, 1fr); }
-.play[data-layout='tiles'] .stage { order: 2; }
-.play[data-layout='tiles'] .tiles-slot { order: 3; display: flex; min-height: 0; }
-.play[data-layout='tiles'] .music-card { order: 3; }
+.play[data-layout='tiles'] .topbar { display: contents; }
+.play[data-layout='tiles'] .brand { grid-area: brand; }
+.play[data-layout='tiles'] .controls { grid-area: controls; }
+.play[data-layout='tiles'] .stage { grid-area: stage; }
+.play[data-layout='tiles'] .tiles-slot { grid-area: main; display: flex; min-height: 0; }
+.play[data-layout='tiles'] .music-card { grid-area: main; }
+.play[data-layout='tiles'] .turn-hint { grid-area: hint; display: flex; }
+.play[data-layout='tiles'] .tabs {
+  grid-area: tabs;
+  display: flex; gap: 4px; padding: 4px;
+  background: var(--ivory); border-radius: 999px;
+}
+.play[data-layout='tiles'] .tabs button { flex: 1; height: 40px; font-size: 0.95rem; }
+.play[data-layout='tiles'] .tabs button[aria-selected='true'] { background: var(--paper); box-shadow: 0 3px 0 var(--ivory-edge); }
 .play[data-layout='tiles']:not([data-mode='free']) .music-card { display: none; }
 .play[data-layout='tiles'][data-mode='free'] .tiles-slot { display: none; }
 .play[data-layout='tiles'] .piano-body { border-radius: 16px; padding: 8px 8px 10px; }
@@ -485,11 +504,32 @@ kbd {
 
 /* A small, cute hint: a little blue phone with a turn arrow. */
 .turn-hint {
-  align-items: center; justify-content: center; gap: 8px;
+  align-items: center; justify-content: center; gap: 6px;
   margin: 0;
-  font-size: 0.8rem; font-weight: 500; color: var(--ink-soft);
+  font-size: 0.75rem; font-weight: 500; color: var(--ink-soft);
 }
-.turn-hint svg { width: 22px; height: 22px; flex: none; }
+.turn-hint svg { width: 18px; height: 18px; flex: none; }
+
+/* Paused tiles: everything stays put under a soft veil, with a little note on top. */
+.tiles.is-paused::before {
+  content: '';
+  position: absolute; inset: 0; z-index: 5;
+  background: rgba(255, 253, 247, 0.82);
+}
+.tiles.is-paused::after {
+  content: 'Paused · tap to carry on';
+  position: absolute; left: 50%; top: 50%; z-index: 6;
+  transform: translate(-50%, -50%);
+  padding: 10px 18px; border-radius: 999px; white-space: nowrap;
+  background: var(--paper); box-shadow: 0 0 0 1.5px var(--paper-edge), 0 4px 0 var(--paper-edge);
+  font-size: 0.95rem; font-weight: 500; color: var(--ink);
+}
+/* While paused, the button that carries on is the dark one (not Autoplay's play button). */
+#tiles-pause.is-on { background: var(--ink); color: var(--paper); box-shadow: 0 3px 0 var(--ebony-edge); }
+#tiles-pause.is-on svg { fill: var(--paper); }
+#tiles-pause { display: none; }
+.play[data-layout='tiles'][data-tiles='running'] #tiles-pause,
+.play[data-layout='tiles'][data-tiles='paused'] #tiles-pause { display: inline-flex; }
 
 /* The tiles field: four lanes on warm paper, a soft blue tap zone at the bottom. */
 .tiles {
@@ -875,3 +915,22 @@ kbd {
   .confetti { display: none; }
   .key.wiggle .key-cap { animation: none; }
 }
+
+/* ------------------------------------------------------------------ Duet (behind a switch) */
+
+/* Who plays what, and how far each player is: left hand on the left, right on the right. */
+.duet-status {
+  position: absolute; left: 16px; right: 16px; bottom: 12px; z-index: 2;
+  display: flex; justify-content: space-between; gap: 12px;
+  font-size: 0.8rem; color: var(--ink-soft); pointer-events: none;
+}
+.play:not([data-mode='duet']) .duet-status { display: none; }
+.duet-side { display: flex; flex-direction: column; gap: 2px; }
+.duet-side:last-child { text-align: right; }
+.duet-side strong { color: var(--ink); font-weight: 500; }
+.duet-count { font-style: normal; font-variant-numeric: tabular-nums; }
+/* Upright phone: no tiles in Duet; the card shows just who plays what, under a big piano. */
+.play[data-layout='tiles'][data-mode='duet'] .tiles-slot { display: none; }
+.play[data-layout='tiles'][data-mode='duet'] .music-card { display: flex; }
+.play[data-layout='tiles'][data-mode='duet'] .music-card > :not(.duet-status) { display: none; }
+.play[data-layout='tiles'][data-mode='duet'] .duet-status { position: static; margin: auto 16px; width: 100%; font-size: 0.95rem; }

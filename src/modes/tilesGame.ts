@@ -38,7 +38,12 @@ export interface TilesGameOptions {
   onHit: (index: number) => void;
   onMiss: (index: number) => void;
   onFinish: (hits: number, total: number) => void;
+  /** The clock started, paused, resumed or ended (shows or hides the pause button). */
+  onState?: (state: TilesState) => void;
 }
+
+/** idle: waiting for the first tap. running: tiles moving. paused. done: song over. */
+export type TilesState = 'idle' | 'running' | 'paused' | 'done';
 
 export class TilesGame {
   private index: number;
@@ -50,6 +55,7 @@ export class TilesGame {
   private wallAtStart = 0; // performance.now() at that moment
   private frame = 0;
   private lastTapLanded = true; // did the most recent tappable tile get played?
+  private pausedAt: number | null = null; // song time where the player paused
 
   constructor(private o: TilesGameOptions) {
     this.index = o.startIndex;
@@ -60,6 +66,29 @@ export class TilesGame {
 
   private isAuto(i: number): boolean {
     return !!this.o.auto?.[i];
+  }
+
+  get paused(): boolean {
+    return this.pausedAt !== null;
+  }
+
+  /** Freeze the tiles where they are. Nothing is missed while paused. */
+  pause(): void {
+    if (!this.running || this.paused) return;
+    this.pausedAt = this.now();
+    cancelAnimationFrame(this.frame);
+    this.o.view.show(this.pausedAt, this.index);
+    this.o.onState?.('paused');
+  }
+
+  /** Carry on from exactly where it was paused. */
+  resume(): void {
+    if (this.pausedAt === null) return;
+    if (this.waiting) this.songAtStart = this.pausedAt;
+    else this.restartClock(this.pausedAt);
+    this.pausedAt = null;
+    this.o.onState?.('running');
+    this.frame = requestAnimationFrame(this.tick);
   }
 
   get active(): boolean {
@@ -75,6 +104,7 @@ export class TilesGame {
 
   tap(lane: number): void {
     if (!this.active) return;
+    if (this.paused) return this.resume(); // a tap while paused just carries on
     const { view, strict } = this.o;
     // A run's self-playing notes still waiting finish first, so the tap counts for your tile.
     while (this.running && this.isAuto(this.index)) {
@@ -95,8 +125,9 @@ export class TilesGame {
     if (!this.running) {
       this.running = true;
       this.restartClock(due);
+      this.o.onState?.('running');
       this.hit();
-      this.frame = requestAnimationFrame(this.tick);
+      if (this.running) this.frame = requestAnimationFrame(this.tick);
       return;
     }
     const early = strict ? EARLY_STRICT : EARLY_LENIENT;
@@ -129,7 +160,7 @@ export class TilesGame {
   }
 
   private tick = (): void => {
-    if (!this.running) return;
+    if (!this.running || this.paused) return;
     const { view, strict } = this.o;
     let t = this.now();
     if (strict) {
@@ -166,6 +197,8 @@ export class TilesGame {
 
   private finish(): void {
     this.stop();
+    this.pausedAt = null;
+    this.o.onState?.('done');
     this.o.view.show(this.o.view.timeOf(this.o.view.count - 1), this.o.view.count);
     this.o.onFinish(this.hits, this.total);
   }

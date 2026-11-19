@@ -2,6 +2,7 @@
  * AboutView — what Magic Keys is, its modes, and credits.
  * Opened from the logo in the top bar, or from the How to play page.
  */
+import { isOn } from '../features';
 export class AboutView {
   private el: HTMLDivElement;
 
@@ -23,7 +24,7 @@ export class AboutView {
           <li><span class="about-dot"></span><span><strong>Magic.</strong> Any key plays the next note of the song. Autoplay plays it all for you.</span></li>
           <li><span class="about-dot"></span><span><strong>Learn.</strong> The next key lights up. The song moves on when you press it.</span></li>
           <li><span class="about-dot"></span><span><strong>Free play.</strong> A normal piano.</span></li>
-          <li><span class="about-dot"></span><span><strong>Listen.</strong> Play or hum something, and it becomes a song.</span></li>
+          ${isOn('listen') ? '<li><span class="about-dot"></span><span><strong>Listen.</strong> Play or hum something, and it becomes a song.</span></li>' : ''}
         </ul>
 
         <h3 class="about-heading">Credits</h3>

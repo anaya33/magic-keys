@@ -8,6 +8,7 @@
  */
 const SEEN_KEY = 'magic-keys:instructions-seen';
 
+import { isOn } from '../features';
 export class InstructionsCard {
   private el: HTMLDivElement;
 
@@ -31,7 +32,7 @@ export class InstructionsCard {
           <li><span class="step-num">3</span><span><strong>Free play</strong> is your own piano${
             touch ? '.' : ': <kbd>Z</kbd> to <kbd>/</kbd> and <kbd>Q</kbd> to <kbd>]</kbd>, with <kbd>Space</kbd> for the pedal.'
           }</span></li>
-          <li><span class="step-num">4</span><span>Tap the song name at the top to pick another piece, upload sheet music, or <strong>record your own</strong> with Listen.</span></li>
+          <li><span class="step-num">4</span><span>Tap the song name at the top to pick another piece or upload sheet music${isOn('listen') ? ', or <strong>record your own</strong> with Listen' : ''}.</span></li>
         </ol>
         <p class="instructions-foot">${touch ? 'Tap ✕ to start' : 'Press any key to start'} · <button class="link-btn" id="about-link">About Magic Keys</button></p>
       </div>`;

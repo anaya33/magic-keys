@@ -22,6 +22,9 @@ const KEY_TO_SEMITONE: Record<string, number> = {
   KeyP: 28, BracketLeft: 29, Equal: 30, BracketRight: 31,
 };
 
+/** The bottom row of letters (Z …): Duet mode gives it to the left-hand player. */
+const LOWER_ROW = new Set(['KeyZ', 'KeyS', 'KeyX', 'KeyD', 'KeyC', 'KeyV', 'KeyG', 'KeyB', 'KeyH', 'KeyN', 'KeyJ', 'KeyM', 'Comma', 'KeyL', 'Period', 'Semicolon', 'Slash']);
+
 /** What to print on a key cap for each physical key code. */
 const CODE_LABEL: Record<string, string> = {
   Comma: ',', Period: '.', Semicolon: ';', Slash: '/', BracketLeft: '[', BracketRight: ']', Equal: '=',
@@ -32,7 +35,8 @@ function labelFor(code: string): string {
 }
 
 export interface ComputerKeysHandlers {
-  onPress: (midi: number, velocity: number) => void;
+  /** `row`: which row of the computer keyboard it came from (Duet splits players by row). */
+  onPress: (midi: number, velocity: number, row?: 'lower' | 'upper') => void;
   onRelease: (midi: number) => void;
   onSustain: (down: boolean) => void;
   onOctave: (baseMidi: number) => void;
@@ -94,7 +98,7 @@ export class ComputerKeys {
     if (this.held.has(e.code)) return;
     const midi = this.baseMidi + semitone;
     this.held.set(e.code, midi);
-    this.handlers.onPress(midi, 0.72);
+    this.handlers.onPress(midi, 0.72, LOWER_ROW.has(e.code) ? 'lower' : 'upper');
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
@@ -119,7 +123,6 @@ export class ComputerKeys {
   };
 }
 
-const LOWER_ROW = new Set(['KeyZ', 'KeyS', 'KeyX', 'KeyD', 'KeyC', 'KeyV', 'KeyG', 'KeyB', 'KeyH', 'KeyN', 'KeyJ', 'KeyM']);
 
 function isTyping(e: KeyboardEvent): boolean {
   const t = e.target as HTMLElement | null;

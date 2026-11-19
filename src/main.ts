@@ -20,8 +20,9 @@ import { isYourSong, listSongs, loadSong, restoreYourSongs } from './music/libra
 import { noteName } from './music/notes';
 import type { Song } from './music/types';
 import { LearnMode, type Hands } from './modes/learn';
+import { DuetMode } from './modes/duet';
 import { MagicMode } from './modes/magic';
-import { TilesGame } from './modes/tilesGame';
+import { TilesGame, type TilesState } from './modes/tilesGame';
 import { celebrate } from './ui/celebrate';
 import { AboutView } from './ui/about';
 import { InstructionsCard } from './ui/instructions';
@@ -29,9 +30,10 @@ import { KeyboardView } from './ui/keyboard';
 import { LibraryView } from './ui/library';
 import { ListenView } from './ui/listen';
 import { SheetView } from './ui/sheet';
+import { isOn } from './features';
 import { TilesView } from './ui/tiles';
 
-type Mode = 'magic' | 'learn' | 'free';
+type Mode = 'magic' | 'learn' | 'free' | 'duet';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -77,28 +79,34 @@ function start(): KeyboardView {
           <button role="tab" data-mode="magic">Magic</button>
           <button role="tab" data-mode="learn">Learn</button>
           <button role="tab" data-mode="free">Free play</button>
+          ${isOn('duet') ? '<button role="tab" data-mode="duet">Duet</button>' : ''}
         </nav>
         <div class="controls">
+          <button class="icon-btn" id="tiles-pause" data-only="magic learn" aria-label="Pause">${ICONS.pause}</button>
           <button class="pill-btn" id="hands" data-only="learn">Right hand</button>
           <button class="pill-btn" id="autoplay" data-only="magic">${ICONS.play}<span>Autoplay</span></button>
-          <button class="icon-btn" id="restart" data-only="magic learn" aria-label="Start the song again">${ICONS.restart}</button>
+          <button class="icon-btn" id="restart" data-only="magic learn duet" aria-label="Start the song again">${ICONS.restart}</button>
           <button class="icon-btn" id="help" aria-label="How to play">?</button>
         </div>
       </header>
 
       <section class="music-card">
-        <div class="music-card-head" data-only="magic learn" role="button" tabindex="0" title="Choose another song">
+        <div class="music-card-head" data-only="magic learn duet" role="button" tabindex="0" title="Choose another song">
           <span class="song-title">Für Elise</span>
           <span class="song-composer">Beethoven</span>
         </div>
-        <div class="sheet-slot" data-only="magic learn"></div>
+        <div class="sheet-slot" data-only="magic learn duet"></div>
+        <div class="duet-status" data-only="duet" aria-live="polite">
+          <span class="duet-side"><strong>Left hand</strong> keys left of middle C<em class="duet-count"></em></span>
+          <span class="duet-side"><strong>Right hand</strong> middle C and up<em class="duet-count"></em></span>
+        </div>
         <div class="played" data-only="free" aria-live="polite">
           <p class="played-empty">Play anything. The notes you play show up here.</p>
         </div>
         <button class="pill-btn clear-btn" data-only="free" hidden>Clear</button>
         <span class="counter" data-only="learn" aria-live="polite"></span>
         <div class="toast" hidden>Bravo! Press any key to play it again.</div>
-        <div class="progress" data-only="magic learn" aria-hidden="true"><div class="progress-fill"></div></div>
+        <div class="progress" data-only="magic learn duet" aria-hidden="true"><div class="progress-fill"></div></div>
       </section>
 
       <p class="turn-hint">${ICONS.rotate}<span>Turn your phone for the full piano</span></p>
@@ -161,6 +169,7 @@ function start(): KeyboardView {
   let song: Song | null = null;
   let magic: MagicMode | null = null;
   let learn: LearnMode | null = null;
+  let duet: DuetMode | null = null;
   let hands: Hands = 'right';
 
   const setProgress = (done: number, total: number) => {
@@ -206,10 +215,31 @@ function start(): KeyboardView {
   });
   $('.tiles-slot').append(tiles.el);
 
+  // Pause button for the tiles (shown while they're moving, Magic and Learn alike).
+  const pauseBtn = $<HTMLButtonElement>('#tiles-pause');
+  const showTilesState = (state: TilesState) => {
+    playEl.dataset.tiles = state;
+    const paused = state === 'paused';
+    tiles.el.classList.toggle('is-paused', paused);
+    pauseBtn.classList.toggle('is-on', paused);
+    pauseBtn.innerHTML = paused ? ICONS.play : ICONS.pause;
+    pauseBtn.setAttribute('aria-label', paused ? 'Carry on' : 'Pause');
+  };
+  pauseBtn.addEventListener('click', () => {
+    if (!tilesGame) return;
+    if (tilesGame.paused) tilesGame.resume();
+    else tilesGame.pause();
+  });
+  // Leaving the app (a call, another app) pauses the tiles, so no notes are missed.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) tilesGame?.pause();
+  });
+
   /** Rebuild the tile column for the current mode and song, and start keeping time. */
   const refreshTiles = () => {
     tilesGame?.stop();
     tilesGame = null;
+    showTilesState('idle');
     if (!tilesQuery.matches || !song) return; // tiles only exist on an upright phone
     if (mode === 'magic' && magic) {
       const times = song.steps.map((st) => st.start);
@@ -233,6 +263,7 @@ function start(): KeyboardView {
         startIndex: m.position,
         onHit: () => m.playNext(0.72),
         onMiss: () => m.skip(),
+        onState: showTilesState,
         onFinish: (hits, total) =>
           celebrate(`You hit ${hits} of ${total} notes on time!`, () => {
             m.restart();
@@ -258,6 +289,7 @@ function start(): KeyboardView {
         startIndex: l.position,
         onHit: () => l.playCurrent(0.72, 1 / speed),
         onMiss: () => {},
+        onState: showTilesState,
         onFinish: () => {}, // Learn mode celebrates by itself
       });
     }
@@ -286,8 +318,32 @@ function start(): KeyboardView {
     );
   };
 
+  // ---- Duet: two players, one per hand (see modes/duet.ts). Off unless switched on.
+  const duetCounts = app.querySelectorAll<HTMLElement>('.duet-count');
+  const startDuet = () => {
+    duet?.destroy();
+    duet = null;
+    if (!song) return;
+    duet = new DuetMode(song, {
+      light: (midi, on) => keyboard.setHighlight(midi, 'magic', on),
+      follow: (groups) => keyboard.follow(groups),
+      position: (beat) => sheet.goTo(beat),
+      progress: (left, right) => {
+        duetCounts[0].textContent = `${left[0]} of ${left[1]}`;
+        duetCounts[1].textContent = `${right[0]} of ${right[1]}`;
+        const total = left[1] + right[1];
+        progressFill.style.transform = `scaleX(${total ? (left[0] + right[0]) / total : 0})`;
+      },
+      finished: () => celebrate(`You played ${song?.title ?? 'the song'} together!`, () => duet?.restart()),
+    });
+  };
+
   const setMode = (next: Mode) => {
     if (next !== 'magic') magic?.stopAutoplay();
+    if (next !== 'duet') {
+      duet?.destroy();
+      duet = null;
+    }
     if (next !== 'learn') {
       learn?.destroy();
       learn = null;
@@ -303,6 +359,7 @@ function start(): KeyboardView {
     keyboard.setLabels(new Map());
     if (next === 'magic') magic?.restart();
     if (next === 'learn') startLearn();
+    if (next === 'duet') startDuet();
     refreshTiles();
     fitToScreen(); // Free play gets a bigger piano in the tiles layout
   };
@@ -349,6 +406,7 @@ function start(): KeyboardView {
   $('#restart').addEventListener('click', () => {
     toast.hidden = true;
     if (mode === 'learn') learn?.restart();
+    else if (mode === 'duet') duet?.restart();
     else magic?.restart();
     refreshTiles();
   });
@@ -395,9 +453,15 @@ function start(): KeyboardView {
     magic?.playNext(touch);
   };
 
-  const press = (midi: number, velocity: number) => {
+  const press = (midi: number, velocity: number, row?: 'lower' | 'upper') => {
     if (panelOpen()) return; // the piano rests while you browse songs or record
     instructions.hide();
+    if (mode === 'duet') {
+      // Computer keyboard: bottom row = left hand, top row = right hand. Piano keys: split at middle C.
+      const hand = row ? (row === 'lower' ? 'left' : 'right') : DuetMode.handFor(midi);
+      duet?.press(hand, velocity);
+      return;
+    }
     if (mode === 'magic') {
       // Phone held sideways: if you tap a key that isn't the next note, the music still
       // plays (it's magic), and the right key shakes its head so you learn where it is.
@@ -416,7 +480,7 @@ function start(): KeyboardView {
     showPlayed(midi);
   };
   const release = (midi: number) => {
-    if (mode === 'magic') return; // magic notes end on their own, after their written length
+    if (mode === 'magic' || mode === 'duet') return; // these notes end on their own, after their written length
     keyboard.setHighlight(midi, 'you', false);
     if (mode === 'learn') return learn?.release(midi);
     piano.noteOff(midi);
@@ -468,7 +532,7 @@ function start(): KeyboardView {
     playEl.dataset.layout = tilesLayout ? 'tiles' : 'wide';
     if (wasTiles && !tilesLayout) refreshTiles(); // turned sideways: stop the tiles clock
     keyboard.setTargetKeyWidth(keyWidthForScreen());
-    if (tilesLayout) keyboard.setMaxHeight(mode === 'free' ? screenHeight() * 0.45 : 120);
+    if (tilesLayout) keyboard.setMaxHeight(mode === 'free' || mode === 'duet' ? screenHeight() * 0.45 : 120);
     else if (shortScreen) keyboard.setMaxHeight(Math.max(90, keysRoomBelowTopbar()));
     else keyboard.setMaxHeight(Math.max(110, screenHeight() * 0.42 - 60));
     if (tilesLayout && !wasTiles) refreshTiles();
