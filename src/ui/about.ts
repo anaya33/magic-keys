@@ -15,7 +15,7 @@ export class AboutView {
     this.el.innerHTML = `
       <button class="close-btn" aria-label="Close About"><span></span><span></span></button>
       <div class="panel-body about-body">
-        <img class="about-icon" src="${import.meta.env.BASE_URL}icons/piano-icon-192.png?v=4" alt="" width="96" height="96" />
+        <img class="about-icon" src="${import.meta.env.BASE_URL}icons/piano-icon-192.png?v=5" alt="" width="96" height="96" />
         <h2 class="panel-title" id="about-title">Magic Keys</h2>
         <p class="about-lead">Magic Keys is a piano. Press any key and it plays real songs.</p>
 
