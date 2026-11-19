@@ -7,7 +7,7 @@
  *  - The page itself may change between deploys, so: network first, cache as fallback.
  * Only this site's own files are touched; nothing is sent anywhere.
  */
-const CACHE = 'magic-keys-v5'; // bump to make every device drop old files (e.g. icons)
+const CACHE = 'magic-keys-v6'; // bump to make every device drop old files (e.g. icons)
 const NEVER_CHANGES = /^(samples|assets|icons|fonts|models)\//;
 /** The app's base path ("/" locally, "/magic-keys/" on GitHub Pages). */
 const SCOPE_PATH = new URL(self.registration.scope).pathname;
