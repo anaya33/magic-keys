@@ -82,7 +82,6 @@ function start(): KeyboardView {
           ${isOn('duet') ? '<button role="tab" data-mode="duet">Duet</button>' : ''}
         </nav>
         <div class="controls">
-          <button class="icon-btn" id="tiles-pause" data-only="magic learn" aria-label="Pause">${ICONS.pause}</button>
           <button class="pill-btn" id="hands" data-only="learn">Right hand</button>
           <button class="pill-btn" id="autoplay" data-only="magic">${ICONS.play}<span>Autoplay</span></button>
           <button class="icon-btn" id="restart" data-only="magic learn duet" aria-label="Start the song again">${ICONS.restart}</button>
@@ -116,6 +115,10 @@ function start(): KeyboardView {
       </section>
 
       <section class="tiles-slot" data-only="magic learn"></section>
+
+      <!-- Upright phones: restart · mode tabs · play/pause, a bar at the bottom where
+           thumbs are. The buttons move here from the top bar (see placeControls). -->
+      <nav class="dock" aria-label="Playing controls"></nav>
     </main>`;
 
   const $ = <T extends HTMLElement>(sel: string) => app.querySelector<T>(sel)!;
@@ -215,21 +218,29 @@ function start(): KeyboardView {
   });
   $('.tiles-slot').append(tiles.el);
 
-  // Pause button for the tiles (shown while they're moving, Magic and Learn alike).
-  const pauseBtn = $<HTMLButtonElement>('#tiles-pause');
-  const showTilesState = (state: TilesState) => {
-    playEl.dataset.tiles = state;
-    const paused = state === 'paused';
-    tiles.el.classList.toggle('is-paused', paused);
-    pauseBtn.classList.toggle('is-on', paused);
-    pauseBtn.innerHTML = paused ? ICONS.play : ICONS.pause;
-    pauseBtn.setAttribute('aria-label', paused ? 'Carry on' : 'Pause');
+  // One play button does it all. Not playing: ▶ starts Autoplay. Autoplay on: ⏸ stops it.
+  // Tapping the tiles yourself: ⏸ pauses them, and ▶ carries on from there.
+  let tilesState: TilesState = 'idle';
+  const updatePlayButton = () => {
+    const autoplaying = !!magic?.autoplaying;
+    const tapping = tilesState === 'running';
+    const paused = tilesState === 'paused';
+    const showPause = autoplaying || tapping || (mode === 'learn' && tilesState === 'idle');
+    const label = autoplaying ? 'Pause' : tapping ? 'Pause' : paused ? 'Carry on' : 'Autoplay';
+    // Learn (upright phone): there's no Autoplay, so the button waits, greyed out, until
+    // you start tapping the tiles; then it pauses them.
+    const waitingInLearn = mode === 'learn' && tilesState === 'idle';
+    autoplayBtn.disabled = waitingInLearn;
+    autoplayBtn.classList.toggle('is-on', autoplaying || paused);
+    autoplayBtn.innerHTML = `${showPause ? ICONS.pause : ICONS.play}<span>${label}</span>`;
+    autoplayBtn.setAttribute('aria-label', label);
   };
-  pauseBtn.addEventListener('click', () => {
-    if (!tilesGame) return;
-    if (tilesGame.paused) tilesGame.resume();
-    else tilesGame.pause();
-  });
+  const showTilesState = (state: TilesState) => {
+    tilesState = state;
+    playEl.dataset.tiles = state;
+    tiles.el.classList.toggle('is-paused', state === 'paused');
+    updatePlayButton();
+  };
   // Leaving the app (a call, another app) pauses the tiles, so no notes are missed.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) tilesGame?.pause();
@@ -382,10 +393,9 @@ function start(): KeyboardView {
       follow: (groups) => keyboard.follow(groups),
       progress: setProgress,
       position: (beat) => sheet.goTo(beat),
-      autoplayChanged: (playing) => {
+      autoplayChanged: () => {
         refreshTiles(); // Autoplay drives the tiles; afterwards the tempo game picks up where it stopped
-        autoplayBtn.classList.toggle('is-on', playing);
-        autoplayBtn.innerHTML = `${playing ? ICONS.pause : ICONS.play}<span>${playing ? 'Pause' : 'Autoplay'}</span>`;
+        updatePlayButton();
       },
       finished: () => (toast.hidden = false),
     });
@@ -395,6 +405,9 @@ function start(): KeyboardView {
   autoplayBtn.addEventListener('click', () => {
     toast.hidden = true;
     instructions.hide();
+    // While you're tapping the tiles yourself, this is the pause / carry-on button.
+    if (tilesGame && tilesState === 'running') return tilesGame.pause();
+    if (tilesGame && tilesState === 'paused') return tilesGame.resume();
     magic?.toggleAutoplay();
   });
   handsBtn.addEventListener('click', () => {
@@ -524,11 +537,37 @@ function start(): KeyboardView {
     return screenHeight() - topbar.getBoundingClientRect().bottom - rowGap - bottomPadding - bodyChrome - overviewSpace - 2;
   };
 
+  /**
+   * Upright phone: restart, the mode tabs and the play button live in a bar at the
+   * bottom (thumb reach); the top keeps just the song and help. Otherwise they go
+   * back into the top bar, in their usual order.
+   */
+  const dock = $<HTMLElement>('.dock');
+  const tabsEl = $<HTMLElement>('.topbar .tabs');
+  const controlsEl = $<HTMLElement>('.topbar .controls');
+  const restartBtn = $<HTMLButtonElement>('#restart');
+  const helpBtn = $<HTMLButtonElement>('#help');
+  let hintShown = false;
+  const placeControls = (inDock: boolean) => {
+    if (inDock) dock.append(restartBtn, tabsEl, autoplayBtn);
+    else {
+      controlsEl.before(tabsEl);
+      helpBtn.before(autoplayBtn, restartBtn); // hands · autoplay · restart · help
+    }
+  };
+
   const fitToScreen = () => {
     const tilesLayout = tilesQuery.matches;
     playEl.dataset.phone = String(phoneQuery.matches);
     const shortScreen = phoneQuery.matches && screenHeight() <= 520; // a phone held sideways
     const wasTiles = playEl.dataset.layout === 'tiles';
+    if (tilesLayout !== wasTiles) placeControls(tilesLayout);
+    if (tilesLayout && !hintShown) {
+      // "Turn your phone for the full piano", for a few seconds, once per visit.
+      hintShown = true;
+      playEl.dataset.hint = 'on';
+      window.setTimeout(() => delete playEl.dataset.hint, 4000);
+    }
     playEl.dataset.layout = tilesLayout ? 'tiles' : 'wide';
     if (wasTiles && !tilesLayout) refreshTiles(); // turned sideways: stop the tiles clock
     keyboard.setTargetKeyWidth(keyWidthForScreen());
@@ -601,6 +640,7 @@ function start(): KeyboardView {
    */
   const HOME_BASE = 48;
   const learnShortcut = (midi: number, chord: number[]): string | null => {
+    if (phoneQuery.matches) return null; // a touch screen has no computer keys to show
     const fits = (base: number) => chord.every((m) => m - base >= 0 && m - base <= 31);
     if (fits(HOME_BASE)) computerKeys.baseMidi = HOME_BASE;
     else if (!fits(computerKeys.baseMidi)) {

@@ -468,20 +468,22 @@ kbd {
 /* Only the tiles layout (a phone held upright) shows the tiles and the turn hint. */
 .tiles-slot, .turn-hint { display: none; }
 
-/* A phone held upright, laid out like a phone app: the song and this mode's controls
-   on top, the piano and the tiles in the middle, the mode tabs as a bar at the bottom
-   (where thumbs are). The top bar's parts become pieces of this grid. */
+/* A phone held upright, laid out like a phone app:
+     top     the song (and Learn's hand switch) · help
+     middle  the piano, then the tiles filling the screen
+     bottom  a bar in thumb reach: restart · Magic / Learn / Free play · play-pause
+   The top bar's parts become pieces of this grid; the bottom bar's buttons are moved
+   into .dock by placeControls() in main.ts. */
 .play[data-layout='tiles'] {
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   grid-template-areas:
     'brand controls'
     'stage stage'
     'main main'
-    'hint hint'
-    'tabs tabs';
+    'dock dock';
   gap: 10px;
-  padding: max(10px, var(--safe-top)) max(12px, var(--safe-right)) max(10px, var(--safe-bottom)) max(12px, var(--safe-left));
+  padding: max(10px, var(--safe-top)) max(12px, var(--safe-right)) max(12px, var(--safe-bottom)) max(12px, var(--safe-left));
 }
 .play[data-layout='tiles'] .topbar { display: contents; }
 .play[data-layout='tiles'] .brand { grid-area: brand; }
@@ -489,26 +491,47 @@ kbd {
 .play[data-layout='tiles'] .stage { grid-area: stage; }
 .play[data-layout='tiles'] .tiles-slot { grid-area: main; display: flex; min-height: 0; }
 .play[data-layout='tiles'] .music-card { grid-area: main; }
-.play[data-layout='tiles'] .turn-hint { grid-area: hint; display: flex; }
-.play[data-layout='tiles'] .tabs {
-  grid-area: tabs;
+
+.dock { display: none; }
+.play[data-layout='tiles'] .dock {
+  grid-area: dock;
+  display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; align-items: center; gap: 8px;
+}
+.dock #restart { grid-column: 1; grid-row: 1; }
+.dock .tabs { grid-column: 2; grid-row: 1; min-width: 0; }
+.dock #autoplay { grid-column: 3; grid-row: 1; }
+.dock #restart, .dock #autoplay {
+  width: 48px; height: 48px; padding: 0; justify-content: center; border-radius: 50%;
+}
+.dock #autoplay span { display: none; }
+.dock #autoplay svg, .dock #restart svg { width: 18px; height: 18px; }
+.dock .tabs {
   display: flex; gap: 4px; padding: 4px;
   background: var(--ivory); border-radius: 999px;
 }
-.play[data-layout='tiles'] .tabs button { flex: 1; height: 40px; font-size: 0.95rem; }
-.play[data-layout='tiles'] .tabs button[aria-selected='true'] { background: var(--paper); box-shadow: 0 3px 0 var(--ivory-edge); }
+.dock .tabs button { flex: 1; height: 40px; padding: 0 6px; font-size: 0.95rem; }
+.dock .tabs button[aria-selected='true'] { background: var(--paper); box-shadow: 0 3px 0 var(--ivory-edge); }
+/* Learn has no Autoplay; on an upright phone the button stays (greyed out until you
+   start) as the pause button, so the bar keeps its shape. */
+.play[data-layout='tiles'][data-mode='learn'] #autoplay { display: inline-flex; }
+.dock #autoplay:disabled { opacity: 0.4; box-shadow: 0 3px 0 var(--ivory-edge); transform: none; cursor: default; }
 .play[data-layout='tiles']:not([data-mode='free']) .music-card { display: none; }
 .play[data-layout='tiles'][data-mode='free'] .tiles-slot { display: none; }
 .play[data-layout='tiles'] .piano-body { border-radius: 16px; padding: 8px 8px 10px; }
 .play[data-layout='tiles'] .overview { height: 18px; margin-bottom: 6px; }
 
-/* A small, cute hint: a little blue phone with a turn arrow. */
+/* A small, cute hint, shown for a few seconds when an upright phone opens the app:
+   a little blue phone with a turn arrow, floating just above the bottom bar. */
 .turn-hint {
-  align-items: center; justify-content: center; gap: 6px;
-  margin: 0;
-  font-size: 0.75rem; font-weight: 500; color: var(--ink-soft);
+  position: absolute; left: 50%; bottom: calc(max(12px, var(--safe-bottom)) + 62px); z-index: 20;
+  transform: translateX(-50%);
+  align-items: center; gap: 6px; margin: 0; padding: 8px 14px; white-space: nowrap;
+  border-radius: 999px; background: var(--paper); box-shadow: 0 0 0 1.5px var(--paper-edge), 0 4px 0 var(--paper-edge);
+  font-size: 0.8rem; font-weight: 500; color: var(--ink);
+  pointer-events: none;
 }
 .turn-hint svg { width: 18px; height: 18px; flex: none; }
+.play[data-layout='tiles'][data-hint='on'] .turn-hint { display: flex; }
 
 /* Paused tiles: everything stays put under a soft veil, with a little note on top. */
 .tiles.is-paused::before {
@@ -524,12 +547,8 @@ kbd {
   background: var(--paper); box-shadow: 0 0 0 1.5px var(--paper-edge), 0 4px 0 var(--paper-edge);
   font-size: 0.95rem; font-weight: 500; color: var(--ink);
 }
-/* While paused, the button that carries on is the dark one (not Autoplay's play button). */
-#tiles-pause.is-on { background: var(--ink); color: var(--paper); box-shadow: 0 3px 0 var(--ebony-edge); }
-#tiles-pause.is-on svg { fill: var(--paper); }
-#tiles-pause { display: none; }
-.play[data-layout='tiles'][data-tiles='running'] #tiles-pause,
-.play[data-layout='tiles'][data-tiles='paused'] #tiles-pause { display: inline-flex; }
+
+
 
 /* The tiles field: four lanes on warm paper, a soft blue tap zone at the bottom. */
 .tiles {
