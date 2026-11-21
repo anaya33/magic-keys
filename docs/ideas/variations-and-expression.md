@@ -58,10 +58,52 @@ Look at what's known and what real piano players say, before building anything:
   add feeling, improvise, and talk about it?
 - **Composers** (YouTube and elsewhere): composing takes the technical side, the
   creative side and emotion together. How do they get from a feeling to a piece?
+- **People who write original music, and people who write about music.** Songwriters
+  and singers with their own pieces, and writers who describe music in words. There's
+  an emotional side in how they write about it that the technical sources miss.
+- **Old Tumblr posts, through the Wayback Machine.** A lot of genuine, personal writing
+  about original pieces and how music feels lived on Tumblr. Archived copies on the
+  Wayback Machine (web.archive.org) are a way to find it now.
+- **Blogs with rich writing about piano expression.** Search the web for blogs that
+  talk in depth about expression, feeling and interpretation, specifically for piano.
+
+Every source is about the piano. When collecting from the web: read archived and
+public pages only, respect each site's rules, summarise in our own words, and keep
+quotes short with a link back. The point is to learn how people feel and talk about
+music, not to copy their writing or their pieces.
 
 What we want out of the research: the main ways people vary a piece, the handful of
-expression controls that matter most, what non-musicians need to compose, and which
-generation approaches give good, playable piano music.
+expression controls that matter most, what non-musicians need to compose, the words
+people use for how music feels, and which generation approaches give good, playable
+piano music.
+
+## The research loop
+
+The research doesn't happen once. It runs as a closed loop until it stops finding
+anything new:
+
+1. **Gather** from the sources above into the research doc (`variations-research.md`).
+2. **Sum up** what was found: patterns, the words people use, what matters most.
+3. **Find the gaps:** questions still open, claims with only one source, sources
+   that disagree, kinds of people not heard from yet.
+4. **Go back** to step 1, aimed at those gaps.
+
+Stop when a full round adds nothing new (the same patterns keep coming back). Each
+round is written down in the doc, so the loop can pick up where it left off.
+
+## Making
+
+Once the research loop has settled, turn it into the thing itself, in this order:
+
+1. **Variations:** take a piece and make versions of it (gentler, darker, simpler …),
+   playable in Magic and Learn.
+2. **Expression:** controls for feeling, in the words people actually use, applied to
+   any song.
+3. **Composing:** make an original piano piece from how you feel and what sounds good
+   to you, no theory needed.
+
+Each one gets tried by ear and fed back into the loop: what people say about the
+results becomes new research questions.
 
 ## Open questions
 
