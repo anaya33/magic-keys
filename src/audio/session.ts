@@ -33,6 +33,22 @@ let silentLoop: HTMLAudioElement | null = null;
 let recording = false;
 
 /**
+ * Set "playback" mode right when the page opens, before the audio engine exists.
+ * Switching the mode later interrupts a running engine (iPhone puts it in an
+ * "interrupted" state), and doing it inside the very tap that should start the sound
+ * left the piano silent. Setting it up front needs no tap (iOS 17+).
+ */
+export function setPlaybackModeEarly(): void {
+  const session = audioSession();
+  if (!session || recording) return;
+  try {
+    if (session.type !== 'playback') session.type = 'playback';
+  } catch {
+    /* harmless */
+  }
+}
+
+/**
  * Ask for "playback" audio, so the piano plays even with the silent switch on.
  * Must run inside a tap or key press (the fallback starts an <audio> element).
  */

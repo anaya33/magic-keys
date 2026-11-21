@@ -957,20 +957,26 @@ kbd {
 /* ------------------------------------------------------------------ full screen (controls hidden) */
 
 /* The top bar (and the upright phone's bottom bar) go away; the music and the piano
-   take the whole screen. One small button in the corner brings the controls back. */
+   take the whole screen. A small tab with a ⌄ hangs from the top edge, in its own
+   thin strip so it never covers a key: tap it to bring the controls back. */
 .show-controls { display: none; }
-.play[data-chrome='hidden'] .show-controls {
-  display: grid;
-  position: fixed; z-index: 30;
-  top: max(10px, var(--safe-top)); right: max(10px, var(--safe-right));
-  opacity: 0.9;
+.play[data-chrome='hidden'] {
+  grid-template-rows: minmax(0, 1fr) auto;
+  padding-top: calc(max(4px, var(--safe-top)) + 26px);
 }
+.play[data-chrome='hidden'] .show-controls {
+  display: grid; place-items: center;
+  position: fixed; z-index: 30; left: 50%; top: max(4px, var(--safe-top));
+  transform: translateX(-50%);
+  width: 64px; height: 22px; padding: 0;
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--ivory); color: var(--ink); box-shadow: 0 2px 0 var(--ivory-edge);
+}
+.play[data-chrome='hidden'] .show-controls svg { width: 16px; height: 16px; }
+.play[data-chrome='hidden'] .show-controls:active { transform: translate(-50%, 2px); box-shadow: none; }
 .play[data-chrome='hidden'] .topbar,
 .play[data-chrome='hidden'] .dock { display: none; }
-.play[data-chrome='hidden'] { grid-template-rows: minmax(0, 1fr) auto; }
 .play[data-layout='tiles'][data-chrome='hidden'] {
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas: 'stage stage' 'main main';
 }
-/* The upright phone's corner button sits on the piano's frame, out of the keys' way. */
-.play[data-layout='tiles'][data-chrome='hidden'] .show-controls { top: max(4px, var(--safe-top)); right: max(4px, var(--safe-right)); }

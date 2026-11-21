@@ -14,6 +14,7 @@
  */
 import './styles.css';
 import { piano } from './audio/piano';
+import { setPlaybackModeEarly } from './audio/session';
 import { ComputerKeys } from './input/computerKeys';
 import { connectMidi } from './input/midi';
 import { isYourSong, listSongs, loadSong, restoreYourSongs } from './music/library';
@@ -62,9 +63,8 @@ const ICONS = {
   notes: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.2v7.3a2.3 2.3 0 1 0 1.5 2.1V6.4l5-1.2v4.3a2.3 2.3 0 1 0 1.5 2.1V2.4a.6.6 0 0 0-.7-.6L6.5 2.6a.6.6 0 0 0-.5.6z"/></svg>',
   chevron: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg>',
   rotate: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="9" y="4" width="14" height="24" rx="3.5" fill="#87D0FB"/><rect x="13" y="24" width="6" height="1.6" rx=".8" fill="#33322D"/><path d="M26.5 12.5a8 8 0 0 0-4-5.5" fill="none" stroke="#33322D" stroke-width="2" stroke-linecap="round"/><path d="M26.8 9.3l-.3 3.2-3-1" fill="none" stroke="#33322D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  // Full screen (hide the controls): four corners pointing out. And back: pointing in.
+  // Full screen (hide the controls): four corners pointing out.
   fullscreen: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg>',
-  exitFullscreen: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/></svg>',
   restart: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a5 5 0 1 0 1.5-3.5"/><path d="M3 2.5V5h2.5"/></svg>',
 };
 
@@ -125,7 +125,7 @@ function start(): KeyboardView {
       <nav class="dock" aria-label="Playing controls"></nav>
 
       <!-- Shown only while the controls are hidden: brings them back. -->
-      <button class="icon-btn show-controls" id="show-controls" aria-label="Show the controls" title="Show the controls">${ICONS.exitFullscreen}</button>
+      <button class="show-controls" id="show-controls" aria-label="Show the controls" title="Show the controls">${ICONS.chevron}</button>
     </main>`;
 
   const $ = <T extends HTMLElement>(sel: string) => app.querySelector<T>(sel)!;
@@ -141,10 +141,12 @@ function start(): KeyboardView {
 
   // ---- sound: build the piano now, in the background; un-pause it on the first interaction,
   // and wake it again on any later tap if a phone call or the background paused it.
+  setPlaybackModeEarly(); // before the audio engine exists (see audio/session.ts)
   void piano.preload().catch((err) => console.warn(err));
+  // iPhones only let sound start from a finished tap (touch-up or click), not from the
+  // moment a finger lands, so we try at every step of a tap until the engine runs.
   const wakeAudio = () => piano.unlock();
-  window.addEventListener('pointerdown', wakeAudio, true);
-  window.addEventListener('keydown', wakeAudio, true);
+  for (const type of ['pointerdown', 'touchend', 'pointerup', 'click', 'keydown']) window.addEventListener(type, wakeAudio, true);
 
   // ---- sheet music
   const sheet = new SheetView();
@@ -221,7 +223,11 @@ function start(): KeyboardView {
     if (panelOpen()) return;
     instructions.hide();
     if (tilesGame) return tilesGame.tap(lane);
-    if (mode === 'magic') magic?.stopAutoplay(); // a tap during Autoplay hands the tiles back to you
+    if (mode === 'magic') {
+      // A tap during Autoplay hands the tiles back to you, and plays the next note too.
+      magic?.stopAutoplay();
+      (tilesGame as TilesGame | null)?.tap(lane); // stopping Autoplay just made a new tiles game
+    }
   });
   $('.tiles-slot').append(tiles.el);
 
@@ -276,15 +282,14 @@ function start(): KeyboardView {
       const m = magic;
       tilesGame = new TilesGame({
         view: tiles,
-        strict: true,
+        kind: 'magic',
         speed,
         auto,
         startIndex: m.position,
         onHit: () => m.playNext(0.72),
-        onMiss: () => m.skip(),
         onState: showTilesState,
-        onFinish: (hits, total) =>
-          celebrate(`You hit ${hits} of ${total} notes on time!`, () => {
+        onFinish: () =>
+          celebrate(`You played ${song?.title ?? 'the song'}!`, () => {
             m.restart();
             refreshTiles();
           }),
@@ -303,11 +308,10 @@ function start(): KeyboardView {
       const speed = Math.min(0.8, comfortableSpeed(times));
       tilesGame = new TilesGame({
         view: tiles,
-        strict: false,
+        kind: 'learn',
         speed,
         startIndex: l.position,
         onHit: () => l.playCurrent(0.72, 1 / speed),
-        onMiss: () => {},
         onState: showTilesState,
         onFinish: () => {}, // Learn mode celebrates by itself
       });
@@ -369,6 +373,7 @@ function start(): KeyboardView {
     }
     mode = next;
     playEl.dataset.mode = next;
+    keyboard.glide = next === 'free' || next === 'learn'; // Magic and Duet: one tap, one step
     app.querySelectorAll<HTMLButtonElement>('.tabs button').forEach((b) => {
       b.setAttribute('aria-selected', String(b.dataset.mode === next));
     });
@@ -581,6 +586,7 @@ function start(): KeyboardView {
     playEl.dataset.layout = tilesLayout ? 'tiles' : 'wide';
     if (wasTiles && !tilesLayout) refreshTiles(); // turned sideways: stop the tiles clock
     keyboard.setTargetKeyWidth(keyWidthForScreen());
+    keyboard.fillHeight = shortScreen && !tilesLayout; // sideways phone: keys fill the screen's height
     if (tilesLayout) keyboard.setMaxHeight(mode === 'free' || mode === 'duet' ? screenHeight() * 0.45 : 120);
     else if (shortScreen) keyboard.setMaxHeight(Math.max(90, keysRoomBelowTopbar()));
     else keyboard.setMaxHeight(Math.max(110, screenHeight() * 0.42 - 60));
@@ -757,3 +763,4 @@ async function revealWhenReady(keyboard: KeyboardView): Promise<void> {
 }
 
 void revealWhenReady(start());
+

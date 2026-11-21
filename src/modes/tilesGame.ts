@@ -1,20 +1,17 @@
 /**
- * TilesGame — keeps the player on tempo in the piano-tiles view (phone held upright).
+ * TilesGame — the piano-tiles view's clock (phone held upright).
  *
- * The tiles move at the song's real speed, on a song clock that starts with your
- * first tap (so you're never rushed at the start). Each tap is judged against the
- * tile waiting in the tap zone:
+ * The tiles move at the song's speed, on a song clock that starts with your first tap
+ * (so you're never rushed at the start). When a tile reaches the tap zone it waits
+ * there for you: nothing is ever missed, and nothing goes by in silence.
  *
- *   Magic (strict)    tap anywhere, but on time. Up to EARLY_STRICT seconds early is
- *                     fine; earlier, the tile shakes its head and nothing plays. A tile
- *                     more than LATE_STRICT seconds late is missed and the music moves
- *                     on without it. At the end you get a score.
- *   Learn (lenient)   tap the tile's lane. The song runs a little slower (speed), an
- *                     early tap up to EARLY_LENIENT seconds counts, and when a tile
- *                     reaches the tap zone it waits there for you; nothing is missed.
- *
- * Notes too quick to tap (marked `auto`, Magic only) play themselves when their time
- * comes, as long as the tap that led into them landed; otherwise they're skipped with it.
+ *   Magic   tap anywhere: every tap plays the next note, right away. Tap early and
+ *           the music simply jumps ahead to meet you. Notes too quick to tap (marked
+ *           `auto`) play themselves after your tap, so runs sound effortless. Magic
+ *           is about sounding like you have the skills.
+ *   Learn   tap the tile's lane. The song runs a little slower (speed), and an early
+ *           tap counts up to EARLY_LEARN seconds before the tile arrives; earlier, or
+ *           in the wrong lane, the tile shakes its head.
  *
  * The clock is the browser's high-resolution timer (performance.now), read once per
  * animation frame; taps are judged against the same clock, so what you see is what
@@ -22,13 +19,12 @@
  */
 import type { TilesView } from '../ui/tiles';
 
-const EARLY_STRICT = 0.15; // seconds
-const LATE_STRICT = 0.2;
-const EARLY_LENIENT = 0.5;
+const EARLY_LEARN = 0.5; // seconds
 
 export interface TilesGameOptions {
   view: TilesView;
-  strict: boolean;
+  /** 'magic': any tap plays the next note. 'learn': tap the tile's own lane. */
+  kind: 'magic' | 'learn';
   /** Song speed: 1 = as written, 0.8 = 80%. */
   speed: number;
   /** Tile to start from (the mode's current position). */
@@ -36,9 +32,8 @@ export interface TilesGameOptions {
   /** Per tile: true if it plays itself (too quick to tap). Optional. */
   auto?: boolean[];
   onHit: (index: number) => void;
-  onMiss: (index: number) => void;
-  onFinish: (hits: number, total: number) => void;
-  /** The clock started, paused, resumed or ended (shows or hides the pause button). */
+  onFinish: () => void;
+  /** The clock started, paused, resumed or ended (drives the play/pause button). */
   onState?: (state: TilesState) => void;
 }
 
@@ -47,20 +42,15 @@ export type TilesState = 'idle' | 'running' | 'paused' | 'done';
 
 export class TilesGame {
   private index: number;
-  private hits = 0;
-  private total: number;
   private running = false;
-  private waiting = false; // Learn: the clock is holding at a tile until it's played
+  private waiting = false; // the clock is holding at a tile until it's played
   private songAtStart = 0; // song time when the clock (re)started
   private wallAtStart = 0; // performance.now() at that moment
   private frame = 0;
-  private lastTapLanded = true; // did the most recent tappable tile get played?
   private pausedAt: number | null = null; // song time where the player paused
 
   constructor(private o: TilesGameOptions) {
     this.index = o.startIndex;
-    this.total = 0;
-    for (let i = o.startIndex; i < o.view.count; i++) if (!this.isAuto(i)) this.total++;
     o.view.show(o.view.timeOf(this.index), this.index);
   }
 
@@ -72,7 +62,11 @@ export class TilesGame {
     return this.pausedAt !== null;
   }
 
-  /** Freeze the tiles where they are. Nothing is missed while paused. */
+  get active(): boolean {
+    return this.index < this.o.view.count;
+  }
+
+  /** Freeze the tiles where they are. */
   pause(): void {
     if (!this.running || this.paused) return;
     this.pausedAt = this.now();
@@ -91,13 +85,10 @@ export class TilesGame {
     this.frame = requestAnimationFrame(this.tick);
   }
 
-  get active(): boolean {
-    return this.index < this.o.view.count;
-  }
-
   /** Song time right now. */
   private now(): number {
     if (!this.running) return this.o.view.timeOf(this.index);
+    if (this.pausedAt !== null) return this.pausedAt;
     if (this.waiting) return this.songAtStart;
     return this.songAtStart + ((performance.now() - this.wallAtStart) / 1000) * this.o.speed;
   }
@@ -105,24 +96,19 @@ export class TilesGame {
   tap(lane: number): void {
     if (!this.active) return;
     if (this.paused) return this.resume(); // a tap while paused just carries on
-    const { view, strict } = this.o;
+    const { view, kind } = this.o;
     // A run's self-playing notes still waiting finish first, so the tap counts for your tile.
-    while (this.running && this.isAuto(this.index)) {
-      const i = this.index++;
-      view.mark(i, this.lastTapLanded ? 'hit' : 'missed');
-      if (this.lastTapLanded) this.o.onHit(i);
-      else this.o.onMiss(i);
-    }
+    while (this.running && this.active && this.isAuto(this.index)) this.hit();
     if (!this.active) return this.finish();
     const due = view.timeOf(this.index);
 
-    // Learn: it has to be the tile's lane.
-    if (!strict && lane !== view.laneOf(this.index)) {
-      view.wiggle(this.index);
-      return;
+    if (kind === 'learn') {
+      // Learn: it has to be the tile's lane, and not too early.
+      if (lane !== view.laneOf(this.index)) return view.wiggle(this.index);
+      if (this.running && this.now() < due - EARLY_LEARN) return view.wiggle(this.index);
     }
-    // First tap starts the clock at the waiting tile.
     if (!this.running) {
+      // First tap starts the clock at this tile.
       this.running = true;
       this.restartClock(due);
       this.o.onState?.('running');
@@ -130,9 +116,12 @@ export class TilesGame {
       if (this.running) this.frame = requestAnimationFrame(this.tick);
       return;
     }
-    const early = strict ? EARLY_STRICT : EARLY_LENIENT;
-    if (this.now() >= due - early) this.hit();
-    else view.wiggle(this.index); // too early: "not yet"
+    // Magic: early is fine; the music jumps ahead to meet you.
+    if (this.now() < due) {
+      this.waiting = false;
+      this.restartClock(due);
+    }
+    this.hit();
   }
 
   stop(): void {
@@ -142,12 +131,10 @@ export class TilesGame {
 
   private hit(): void {
     const i = this.index++;
-    if (!this.isAuto(i)) this.hits++;
-    this.lastTapLanded = true;
     this.o.view.mark(i, 'hit');
     this.o.onHit(i);
     if (this.waiting) {
-      // Learn: the player caught up; the music carries on from here.
+      // The player caught up; the music carries on from here.
       this.waiting = false;
       this.restartClock(this.songAtStart);
     }
@@ -161,32 +148,13 @@ export class TilesGame {
 
   private tick = (): void => {
     if (!this.running || this.paused) return;
-    const { view, strict } = this.o;
+    const { view } = this.o;
     let t = this.now();
-    if (strict) {
-      while (this.active) {
-        const i = this.index;
-        if (this.isAuto(i) && t >= view.timeOf(i)) {
-          // Too quick to tap: plays itself if the tap leading into it landed.
-          this.index++;
-          if (this.lastTapLanded) {
-            view.mark(i, 'hit');
-            this.o.onHit(i);
-          } else {
-            view.mark(i, 'missed');
-            this.o.onMiss(i);
-          }
-        } else if (!this.isAuto(i) && t > view.timeOf(i) + LATE_STRICT) {
-          // Magic: a tile that went by untouched is missed; the music doesn't wait.
-          this.index++;
-          this.lastTapLanded = false;
-          view.mark(i, 'missed');
-          this.o.onMiss(i);
-        } else break;
-      }
-      if (!this.active) return this.finish();
-    } else if (!this.waiting && t >= view.timeOf(this.index)) {
-      // Learn: hold the tile in the tap zone until it's played.
+    // Quick notes play themselves when their time comes (after the tap that led in).
+    while (this.active && this.isAuto(this.index) && !this.waiting && t >= view.timeOf(this.index)) this.hit();
+    if (!this.active) return; // finish() already ran
+    if (!this.waiting && t >= view.timeOf(this.index)) {
+      // The next tile reached the tap zone: it waits there for you.
       this.waiting = true;
       this.songAtStart = view.timeOf(this.index);
       t = this.songAtStart;
@@ -200,6 +168,6 @@ export class TilesGame {
     this.pausedAt = null;
     this.o.onState?.('done');
     this.o.view.show(this.o.view.timeOf(this.o.view.count - 1), this.o.view.count);
-    this.o.onFinish(this.hits, this.total);
+    this.o.onFinish();
   }
 }

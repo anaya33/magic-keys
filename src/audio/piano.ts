@@ -109,8 +109,11 @@ export class PianoEngine {
   unlock(): void {
     preferPlaybackAudio(); // phones: play through the silent switch (see audio/session.ts)
     if (this.tone) {
-      // Also wakes the engine after an interruption (a call, the app in the background).
-      if (this.tone.getContext().state !== 'running') void this.tone.start();
+      // Also wakes the engine after an interruption (a call, the app in the background,
+      // iPhone's "interrupted" state). Called straight from the event, so it counts as
+      // the user's tap.
+      const context = this.tone.getContext();
+      if (context.state !== 'running') void context.rawContext.resume().catch(() => {});
     } else void this.preload().then(() => this.tone?.start()).catch((err) => console.warn(err));
   }
 

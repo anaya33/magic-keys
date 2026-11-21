@@ -109,6 +109,9 @@ export class KeyboardView {
   }
 
   /** The tallest the playing keys may be (the rest of the screen is decided by the page). */
+  /** Phone held sideways: the keys fill all the height they're given (taller keys). */
+  fillHeight = false;
+
   setMaxHeight(px: number): void {
     this.maxHeight = px;
     this.queueLayout();
@@ -224,7 +227,8 @@ export class KeyboardView {
     this.keyWidth = width / count;
     this.el.style.setProperty('--kw', `${this.keyWidth}px`);
     this.trackEl.style.width = `${this.keyWidth * ALL_WHITES.length}px`;
-    this.keysEl.style.height = `${Math.round(Math.min(this.maxHeight, this.keyWidth * IDEAL_ASPECT))}px`;
+    const natural = this.keyWidth * IDEAL_ASPECT;
+    this.keysEl.style.height = `${Math.round(this.fillHeight ? this.maxHeight : Math.min(this.maxHeight, natural))}px`;
     this.setStart(Math.round(middle - count / 2), false);
     this.markLaidOut();
   }
@@ -404,6 +408,12 @@ export class KeyboardView {
     return 0.45 + depth * 0.45;
   }
 
+  /**
+   * Sliding a finger across keys plays each one. Magic mode turns this off: there each
+   * tap is one magic step, and a finger that drifts over a key edge must not add notes.
+   */
+  glide = true;
+
   private bindPointerEvents(): void {
     const press = (pointerId: number, key: HTMLDivElement, y: number) => {
       const midi = Number(key.dataset.midi);
@@ -424,9 +434,9 @@ export class KeyboardView {
       this.keysEl.setPointerCapture(e.pointerId);
       press(e.pointerId, key, e.clientY);
     });
-    // Sliding a finger across the keys plays each one (glissando).
+    // Sliding a finger across the keys plays each one (glissando), unless turned off.
     this.keysEl.addEventListener('pointermove', (e) => {
-      if (!this.pointerNotes.has(e.pointerId)) return;
+      if (!this.glide || !this.pointerNotes.has(e.pointerId)) return;
       const key = this.keyAt(e.clientX, e.clientY);
       if (!key || Number(key.dataset.midi) === this.pointerNotes.get(e.pointerId)) return;
       release(e.pointerId);
