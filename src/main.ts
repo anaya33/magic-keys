@@ -83,7 +83,7 @@ function start(): KeyboardView {
         </nav>
         <div class="controls">
           <button class="pill-btn" id="hands" data-only="learn">Right hand</button>
-          <button class="pill-btn" id="autoplay" data-only="magic">${ICONS.play}<span>Autoplay</span></button>
+          <button class="icon-btn" id="autoplay" data-only="magic" aria-label="Autoplay" title="Autoplay">${ICONS.play}</button>
           <button class="icon-btn" id="restart" data-only="magic learn duet" aria-label="Start the song again">${ICONS.restart}</button>
           <button class="icon-btn" id="help" aria-label="How to play">?</button>
         </div>
@@ -232,8 +232,9 @@ function start(): KeyboardView {
     const waitingInLearn = mode === 'learn' && tilesState === 'idle';
     autoplayBtn.disabled = waitingInLearn;
     autoplayBtn.classList.toggle('is-on', autoplaying || paused);
-    autoplayBtn.innerHTML = `${showPause ? ICONS.pause : ICONS.play}<span>${label}</span>`;
+    autoplayBtn.innerHTML = showPause ? ICONS.pause : ICONS.play;
     autoplayBtn.setAttribute('aria-label', label);
+    autoplayBtn.title = label;
   };
   const showTilesState = (state: TilesState) => {
     tilesState = state;

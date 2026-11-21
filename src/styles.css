@@ -285,6 +285,9 @@ body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none
   box-shadow: 0 3px 0 var(--ivory-edge);
 }
 .icon-btn:active { transform: translateY(3px); box-shadow: 0 0 0 var(--ivory-edge); }
+/* Play/pause while something is playing or waiting to carry on: lit blue. */
+.icon-btn.is-on { background: var(--lit); box-shadow: 0 3px 0 var(--body-shade); }
+.icon-btn.is-on:active { box-shadow: 0 0 0 var(--body-shade); }
 
 /* A plain ✕: two rounded ink bars, no fill. A soft ivory circle appears on hover. */
 .close-btn {
@@ -503,7 +506,6 @@ kbd {
 .dock #restart, .dock #autoplay {
   width: 48px; height: 48px; padding: 0; justify-content: center; border-radius: 50%;
 }
-.dock #autoplay span { display: none; }
 .dock #autoplay svg, .dock #restart svg { width: 18px; height: 18px; }
 .dock .tabs {
   display: flex; gap: 4px; padding: 4px;
@@ -513,7 +515,7 @@ kbd {
 .dock .tabs button[aria-selected='true'] { background: var(--paper); box-shadow: 0 3px 0 var(--ivory-edge); }
 /* Learn has no Autoplay; on an upright phone the button stays (greyed out until you
    start) as the pause button, so the bar keeps its shape. */
-.play[data-layout='tiles'][data-mode='learn'] #autoplay { display: inline-flex; }
+.play[data-layout='tiles'][data-mode='learn'] #autoplay { display: grid; }
 .dock #autoplay:disabled { opacity: 0.4; box-shadow: 0 3px 0 var(--ivory-edge); transform: none; cursor: default; }
 .play[data-layout='tiles']:not([data-mode='free']) .music-card { display: none; }
 .play[data-layout='tiles'][data-mode='free'] .tiles-slot { display: none; }
@@ -892,8 +894,6 @@ kbd {
 
 /* Very narrow phones: Autoplay shows just its icon, tabs tighten up. */
 @media (max-width: 420px) {
-  #autoplay span { display: none; }
-  #autoplay { padding: 0 10px; }
   .tabs { gap: 2px; }
   .tabs button { padding: 0 10px; font-size: 0.85rem; }
   .controls { gap: 6px; }
