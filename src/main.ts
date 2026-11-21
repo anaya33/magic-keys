@@ -239,12 +239,14 @@ function start(): KeyboardView {
     const tapping = tilesState === 'running';
     const paused = tilesState === 'paused';
     const showPause = autoplaying || tapping || (mode === 'learn' && tilesState === 'idle');
-    const label = autoplaying ? 'Pause' : tapping ? 'Pause' : paused ? 'Carry on' : 'Autoplay';
+    // Paused: in Magic, ▶ means Autoplay from here (tapping the tiles carries on with you
+    // playing); in Learn there's no Autoplay, so ▶ just carries on.
+    const label = autoplaying || tapping ? 'Pause' : paused && mode === 'learn' ? 'Carry on' : 'Autoplay';
     // Learn (upright phone): there's no Autoplay, so the button waits, greyed out, until
     // you start tapping the tiles; then it pauses them.
     const waitingInLearn = mode === 'learn' && tilesState === 'idle';
     autoplayBtn.disabled = waitingInLearn;
-    autoplayBtn.classList.toggle('is-on', autoplaying || paused);
+    autoplayBtn.classList.toggle('is-on', autoplaying || (paused && mode === 'learn'));
     autoplayBtn.innerHTML = showPause ? ICONS.pause : ICONS.play;
     autoplayBtn.setAttribute('aria-label', label);
     autoplayBtn.title = label;
@@ -253,6 +255,7 @@ function start(): KeyboardView {
     tilesState = state;
     playEl.dataset.tiles = state;
     tiles.el.classList.toggle('is-paused', state === 'paused');
+    tiles.el.dataset.pausedText = mode === 'magic' ? 'Paused · tap to play, ▶ to autoplay' : 'Paused · tap to carry on';
     updatePlayButton();
   };
   // Leaving the app (a call, another app) pauses the tiles, so no notes are missed.
@@ -418,9 +421,10 @@ function start(): KeyboardView {
   autoplayBtn.addEventListener('click', () => {
     toast.hidden = true;
     instructions.hide();
-    // While you're tapping the tiles yourself, this is the pause / carry-on button.
+    // ⏸ while you're tapping: pause. ▶ is always Autoplay in Magic (from wherever you
+    // are, paused or not); tapping the tiles is always you playing. Learn: ▶ carries on.
     if (tilesGame && tilesState === 'running') return tilesGame.pause();
-    if (tilesGame && tilesState === 'paused') return tilesGame.resume();
+    if (tilesGame && tilesState === 'paused' && mode === 'learn') return tilesGame.resume();
     magic?.toggleAutoplay();
   });
   handsBtn.addEventListener('click', () => {
