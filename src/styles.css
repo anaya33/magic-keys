@@ -953,3 +953,24 @@ kbd {
 .play[data-layout='tiles'][data-mode='duet'] .music-card { display: flex; }
 .play[data-layout='tiles'][data-mode='duet'] .music-card > :not(.duet-status) { display: none; }
 .play[data-layout='tiles'][data-mode='duet'] .duet-status { position: static; margin: auto 16px; width: 100%; font-size: 0.95rem; }
+
+/* ------------------------------------------------------------------ full screen (controls hidden) */
+
+/* The top bar (and the upright phone's bottom bar) go away; the music and the piano
+   take the whole screen. One small button in the corner brings the controls back. */
+.show-controls { display: none; }
+.play[data-chrome='hidden'] .show-controls {
+  display: grid;
+  position: fixed; z-index: 30;
+  top: max(10px, var(--safe-top)); right: max(10px, var(--safe-right));
+  opacity: 0.9;
+}
+.play[data-chrome='hidden'] .topbar,
+.play[data-chrome='hidden'] .dock { display: none; }
+.play[data-chrome='hidden'] { grid-template-rows: minmax(0, 1fr) auto; }
+.play[data-layout='tiles'][data-chrome='hidden'] {
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: 'stage stage' 'main main';
+}
+/* The upright phone's corner button sits on the piano's frame, out of the keys' way. */
+.play[data-layout='tiles'][data-chrome='hidden'] .show-controls { top: max(4px, var(--safe-top)); right: max(4px, var(--safe-right)); }

@@ -62,6 +62,9 @@ const ICONS = {
   notes: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.2v7.3a2.3 2.3 0 1 0 1.5 2.1V6.4l5-1.2v4.3a2.3 2.3 0 1 0 1.5 2.1V2.4a.6.6 0 0 0-.7-.6L6.5 2.6a.6.6 0 0 0-.5.6z"/></svg>',
   chevron: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg>',
   rotate: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="9" y="4" width="14" height="24" rx="3.5" fill="#87D0FB"/><rect x="13" y="24" width="6" height="1.6" rx=".8" fill="#33322D"/><path d="M26.5 12.5a8 8 0 0 0-4-5.5" fill="none" stroke="#33322D" stroke-width="2" stroke-linecap="round"/><path d="M26.8 9.3l-.3 3.2-3-1" fill="none" stroke="#33322D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  // Full screen (hide the controls): four corners pointing out. And back: pointing in.
+  fullscreen: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg>',
+  exitFullscreen: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"/></svg>',
   restart: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a5 5 0 1 0 1.5-3.5"/><path d="M3 2.5V5h2.5"/></svg>',
 };
 
@@ -86,6 +89,7 @@ function start(): KeyboardView {
           <button class="icon-btn" id="autoplay" data-only="magic" aria-label="Autoplay" title="Autoplay">${ICONS.play}</button>
           <button class="icon-btn" id="restart" data-only="magic learn duet" aria-label="Start the song again">${ICONS.restart}</button>
           <button class="icon-btn" id="help" aria-label="How to play">?</button>
+          <button class="icon-btn" id="hide-controls" aria-label="Full screen: hide the controls" title="Full screen">${ICONS.fullscreen}</button>
         </div>
       </header>
 
@@ -119,6 +123,9 @@ function start(): KeyboardView {
       <!-- Upright phones: restart · mode tabs · play/pause, a bar at the bottom where
            thumbs are. The buttons move here from the top bar (see placeControls). -->
       <nav class="dock" aria-label="Playing controls"></nav>
+
+      <!-- Shown only while the controls are hidden: brings them back. -->
+      <button class="icon-btn show-controls" id="show-controls" aria-label="Show the controls" title="Show the controls">${ICONS.exitFullscreen}</button>
     </main>`;
 
   const $ = <T extends HTMLElement>(sel: string) => app.querySelector<T>(sel)!;
@@ -535,7 +542,9 @@ function start(): KeyboardView {
     const bodyChrome = (parseFloat(bodyStyle.paddingTop) || 0) + (parseFloat(bodyStyle.paddingBottom) || 0);
     const overview = body.querySelector<HTMLElement>('.overview');
     const overviewSpace = overview ? overview.offsetHeight + (parseFloat(getComputedStyle(overview).marginBottom) || 0) : 0;
-    return screenHeight() - topbar.getBoundingClientRect().bottom - rowGap - bottomPadding - bodyChrome - overviewSpace - 2;
+    // With the controls hidden, the keys start right at the top padding.
+    const top = playEl.dataset.chrome === 'hidden' ? parseFloat(playStyle.paddingTop) || 0 : topbar.getBoundingClientRect().bottom + rowGap;
+    return screenHeight() - top - bottomPadding - bodyChrome - overviewSpace - 2;
   };
 
   /**
@@ -590,6 +599,27 @@ function start(): KeyboardView {
     fitToScreen();
     keyboard.layoutNow();
   };
+
+  // ---- full screen: hide the top bar (and the bottom bar on an upright phone) so the
+  // piano gets the whole screen. One small button in the corner brings them back.
+  // Remembered for next time.
+  const setControlsHidden = (hidden: boolean) => {
+    if (hidden) playEl.dataset.chrome = 'hidden';
+    else delete playEl.dataset.chrome;
+    try {
+      localStorage.setItem('magic-keys:controls-hidden', hidden ? '1' : '0');
+    } catch {
+      /* private browsing: just don't remember */
+    }
+    refit();
+  };
+  $('#hide-controls').addEventListener('click', () => setControlsHidden(true));
+  $('#show-controls').addEventListener('click', () => setControlsHidden(false));
+  try {
+    if (localStorage.getItem('magic-keys:controls-hidden') === '1') setControlsHidden(true);
+  } catch {
+    /* ignore */
+  }
   const refitAfterRotation = () => {
     refit();
     requestAnimationFrame(refit);
