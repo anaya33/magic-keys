@@ -45,9 +45,14 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
  */
 const TOUCH_DEVICE = '(hover: none) and (pointer: coarse)';
 
-/** Chunky keys on desktop and phone-landscape; narrower keys only on an upright phone. */
+/**
+ * Chunky keys on desktop and phone-landscape. An upright phone shows about ten white
+ * keys across (an octave and a bit, C to E), so each one is big enough for a thumb.
+ */
 function keyWidthForScreen(): number {
-  if (window.matchMedia(`(orientation: portrait) and ${TOUCH_DEVICE}`).matches) return 34;
+  if (window.matchMedia(`(orientation: portrait) and ${TOUCH_DEVICE}`).matches) {
+    return Math.max(30, (window.innerWidth - 40) / 10); // 40: the screen's and the piano's side padding
+  }
   if (window.innerWidth >= 1100) return 68;
   return 56;
 }
@@ -219,16 +224,19 @@ function start(): KeyboardView {
     });
   };
   let tilesGame: TilesGame | null = null;
-  const tiles = new TilesView((lane) => {
+  /** A tap on the falling notes or on the piano under them (`lane`: the key, or -1). */
+  const tapTiles = (lane: number) => {
     if (panelOpen()) return;
     instructions.hide();
+    toast.hidden = true;
     if (tilesGame) return tilesGame.tap(lane);
     if (mode === 'magic') {
       // A tap during Autoplay hands the tiles back to you, and plays the next note too.
       magic?.stopAutoplay();
       (tilesGame as TilesGame | null)?.tap(lane); // stopping Autoplay just made a new tiles game
     }
-  });
+  };
+  const tiles = new TilesView(tapTiles);
   $('.tiles-slot').append(tiles.el);
 
   // One play button does it all. Not playing: ▶ starts Autoplay. Autoplay on: ⏸ stops it.
@@ -305,6 +313,7 @@ function start(): KeyboardView {
           top: Math.max(...group),
           time: times[i],
           label: group.map((midi) => noteName(midi, false)).join(' '),
+          keys: group,
         })),
         l.position,
       );
@@ -492,6 +501,15 @@ function start(): KeyboardView {
       duet?.press(hand, velocity);
       return;
     }
+    if (tilesQuery.matches && (mode === 'magic' || mode === 'learn')) {
+      // Upright phone: the piano plays the falling notes. Magic: any key plays the next
+      // one (and the right key gives a little shake). Learn: it has to be the note's key.
+      if (mode === 'learn') keyboard.setHighlight(midi, 'you', true);
+      const expected = mode === 'magic' ? magic?.nextNotes ?? [] : [];
+      tapTiles(midi);
+      if (expected.length && !expected.includes(midi)) for (const right of expected) keyboard.wiggle(right);
+      return;
+    }
     if (mode === 'magic') {
       // Phone held sideways: if you tap a key that isn't the next note, the music still
       // plays (it's magic), and the right key shakes its head so you learn where it is.
@@ -512,6 +530,7 @@ function start(): KeyboardView {
   const release = (midi: number) => {
     if (mode === 'magic' || mode === 'duet') return; // these notes end on their own, after their written length
     keyboard.setHighlight(midi, 'you', false);
+    if (mode === 'learn' && tilesQuery.matches) return; // the falling notes handle Learn upright
     if (mode === 'learn') return learn?.release(midi);
     piano.noteOff(midi);
   };
@@ -527,9 +546,17 @@ function start(): KeyboardView {
     onRelease: release,
   });
   $('.piano-body').append(keyboard.el);
+  // Upright phone: the falling notes slide along with the keys under them.
+  keyboard.onView = (animate) => tiles.syncKeys(animate);
+  const keyGeometry = {
+    box: (midi: number) => keyboard.keyBox(midi),
+    offset: () =>
+      keyboard.keysWindow.getBoundingClientRect().left - tiles.el.getBoundingClientRect().left - keyboard.scrollX,
+  };
 
   // Three layouts:
-  //  - "tiles": a phone held upright. A short piano strip on top, falling tiles below.
+  //  - "tiles": a phone held upright. Falling notes on top, the piano at the bottom,
+  //    each note landing on its own key.
   //  - short screens (a phone held sideways): the full piano gets everything below the
   //    control row, measured from the real layout so nothing is ever cut off.
   //  - everything else: sheet music in the middle, the piano takes about 45% of the height.
@@ -591,7 +618,8 @@ function start(): KeyboardView {
     if (wasTiles && !tilesLayout) refreshTiles(); // turned sideways: stop the tiles clock
     keyboard.setTargetKeyWidth(keyWidthForScreen());
     keyboard.fillHeight = shortScreen && !tilesLayout; // sideways phone: keys fill the screen's height
-    if (tilesLayout) keyboard.setMaxHeight(mode === 'free' || mode === 'duet' ? screenHeight() * 0.45 : 120);
+    tiles.setKeys(tilesLayout ? keyGeometry : null);
+    if (tilesLayout) keyboard.setMaxHeight(screenHeight() * 0.3);
     else if (shortScreen) keyboard.setMaxHeight(Math.max(90, keysRoomBelowTopbar()));
     else keyboard.setMaxHeight(Math.max(110, screenHeight() * 0.42 - 60));
     if (tilesLayout && !wasTiles) refreshTiles();

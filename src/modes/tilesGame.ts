@@ -9,7 +9,7 @@
  *           the music simply jumps ahead to meet you. Notes too quick to tap (marked
  *           `auto`) play themselves after your tap, so runs sound effortless. Magic
  *           is about sounding like you have the skills.
- *   Learn   tap the tile's lane. The song runs a little slower (speed), and an early
+ *   Learn   tap the tile's lane (or, with tiles falling onto the piano, its key). The song runs a little slower (speed), and an early
  *           tap counts up to EARLY_LEARN seconds before the tile arrives; earlier, or
  *           in the wrong lane, the tile shakes its head.
  *
@@ -104,7 +104,7 @@ export class TilesGame {
 
     if (kind === 'learn') {
       // Learn: it has to be the tile's lane, and not too early.
-      if (lane !== view.laneOf(this.index)) return view.wiggle(this.index);
+      if (!view.accepts(this.index, lane)) return view.wiggle(this.index);
       if (this.running && this.now() < due - EARLY_LEARN) return view.wiggle(this.index);
     }
     if (!this.running) {

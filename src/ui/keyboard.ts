@@ -187,6 +187,30 @@ export class KeyboardView {
     for (const midi of touched) this.paintKey(midi);
   }
 
+  /**
+   * Where a key sits on the long track, in px from the lowest key (an upright phone's
+   * falling notes line up with these). `null` for a note off the piano.
+   */
+  keyBox(midi: number): { left: number; width: number } | null {
+    const key = this.keyEls.get(midi);
+    if (!key) return null;
+    const track = this.keyWidth * ALL_WHITES.length;
+    return { left: (parseFloat(key.style.left) / 100) * track, width: (parseFloat(key.style.width) / 100) * track };
+  }
+
+  /** The window onto the keys (its left edge is where `scrollX` of the track starts). */
+  get keysWindow(): HTMLElement {
+    return this.keysEl;
+  }
+
+  /** How far the track is slid to the left, in px. */
+  get scrollX(): number {
+    return this.startWhite * this.keyWidth;
+  }
+
+  /** Called whenever the keys slide or change size (`animate`: it's a smooth slide). */
+  onView?: (animate: boolean) => void;
+
   /** A small sideways nudge, used to point at the right key after a wrong press. */
   wiggle(midi: number): void {
     const key = this.keyEls.get(midi);
@@ -247,6 +271,7 @@ export class KeyboardView {
     this.trackEl.classList.toggle('is-sliding', animate);
     this.trackEl.style.transform = `translateX(${-this.startWhite * this.keyWidth}px)`;
     this.updateOverviewWindow();
+    this.onView?.(animate);
   }
 
   private isVisible(notes: number[]): boolean {

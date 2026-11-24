@@ -9,6 +9,11 @@
  *
  * Notes too quick to tap (Magic) are thin "ghost" tiles that play themselves.
  *
+ * Two ways to place them across:
+ *   - lanes (default): four lanes that follow the shape of the melody (below).
+ *   - keys (setKeys): each tile falls straight onto its own piano key, which sits
+ *     right under the field, and slides along with the keys when they move.
+ *
  * Lanes follow the shape of the melody: a higher note moves one lane to the
  * right, a lower note one lane to the left, a repeated note stays put. So
  * Für Elise's E–D♯–E–D♯ zig-zags between two lanes and your fingers feel the tune.
@@ -31,6 +36,16 @@ export interface Tile {
   label?: string;
   /** Too quick to tap: plays itself, carried by the tap before it (drawn as a thin ghost tile). */
   auto?: boolean;
+  /** Keys mode: every key that counts as playing this tile (a chord). Defaults to `top`. */
+  keys?: number[];
+}
+
+/** Where the piano's keys are, for tiles that fall onto them. */
+export interface KeyGeometry {
+  /** A key's place on the piano's long track, in px. */
+  box(midi: number): { left: number; width: number } | null;
+  /** px from the field's left edge to the track's lowest key, as the keys are slid right now. */
+  offset(): number;
 }
 
 export class TilesView {
@@ -43,6 +58,7 @@ export class TilesView {
   private next = 0; // index of the tile waiting to be played
   private time = 0; // song time currently shown at the tap zone
   private speed = 300; // px per second of song time
+  private keys: KeyGeometry | null = null;
 
   constructor(private onTap: (lane: number) => void) {
     this.el = document.createElement('div');
@@ -54,12 +70,20 @@ export class TilesView {
     this.column = this.el.querySelector('.tiles-column')!;
     this.el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      if (this.keys) {
+        // Keys mode: a tap on a tile counts as its key; anywhere else is just a tap.
+        const tile = (e.target as HTMLElement).closest<HTMLElement>('.tile');
+        return this.onTap(tile ? Number(tile.dataset.top) : -1);
+      }
       const rect = this.el.getBoundingClientRect();
       const lane = Math.min(LANES - 1, Math.max(0, Math.floor(((e.clientX - rect.left) / rect.width) * LANES)));
       this.onTap(lane);
     });
     // Tiles are sized from the view's own height; refresh positions when it changes.
-    new ResizeObserver(() => this.render(false)).observe(this.el);
+    new ResizeObserver(() => {
+      this.syncKeys(false);
+      this.render(false);
+    }).observe(this.el);
   }
 
   /** Show a new list of tiles (a new song, or a mode change), with `next` in the tap zone. */
@@ -72,6 +96,34 @@ export class TilesView {
     this.next = next;
     this.time = tiles[next]?.time ?? 0;
     this.render(false);
+  }
+
+  /** Let tiles fall onto piano keys (or `null`: back to the four lanes). */
+  setKeys(keys: KeyGeometry | null): void {
+    if (!keys && !this.keys) return;
+    this.keys = keys;
+    this.el.classList.toggle('on-keys', !!keys);
+    this.column.replaceChildren();
+    this.live.clear();
+    this.column.style.transform = '';
+    this.syncKeys(false);
+    this.render(false);
+  }
+
+  /** The keys slid or changed size: move the tiles with them (`animate`: glide along). */
+  syncKeys(animate: boolean): void {
+    if (!this.keys) return;
+    this.column.classList.toggle('is-sliding', animate);
+    this.column.style.transform = `translateX(${this.keys.offset()}px)`;
+    for (const [i, el] of this.live) this.placeOnKey(el, i);
+  }
+
+  /** Does a tap on `lane` (keys mode: a key) play tile `index`? */
+  accepts(index: number, lane: number): boolean {
+    const tile = this.tiles[index];
+    if (!tile) return false;
+    if (this.keys) return (tile.keys ?? [tile.top]).includes(lane);
+    return lane === this.lanes[index];
   }
 
   get count(): number {
@@ -127,7 +179,7 @@ export class TilesView {
     const tileHeight = Math.max(64, Math.min(110, height / 5.5));
     this.el.style.setProperty('--tile-h', `${tileHeight}px`);
     this.speed = this.speedFor(tileHeight);
-    const zoneTop = height - tileHeight - 16; // where a tile sits when it is due
+    const zoneTop = height - tileHeight - (this.keys ? 6 : 16); // where a tile sits when it is due
 
     // Visible song-time window: a little below the tap zone up to the top edge.
     const from = this.time - (tileHeight + 40) / this.speed;
@@ -170,11 +222,24 @@ export class TilesView {
     return Math.min(MAX_SPEED, Math.max(MIN_SPEED, (tileHeight + GAP) / Math.max(0.08, typicalShortGap)));
   }
 
+  /** Keys mode: a tile sits right above its key, as wide as the key. */
+  private placeOnKey(el: HTMLDivElement, i: number): void {
+    const box = this.keys?.box(this.tiles[i].top);
+    if (!box) return;
+    el.style.left = `${box.left}px`;
+    el.style.width = `${box.width}px`;
+    el.classList.toggle('on-black', box.width < 0.8 * (this.keys?.box(60)?.width ?? box.width));
+  }
+
   private makeTile(i: number): HTMLDivElement {
     const el = document.createElement('div');
     el.className = this.tiles[i].auto ? 'tile is-auto' : 'tile';
-    el.style.left = `${(this.lanes[i] / LANES) * 100}%`;
-    el.style.width = `${100 / LANES}%`;
+    el.dataset.top = String(this.tiles[i].top);
+    if (this.keys) this.placeOnKey(el, i);
+    else {
+      el.style.left = `${(this.lanes[i] / LANES) * 100}%`;
+      el.style.width = `${100 / LANES}%`;
+    }
     const result = this.state.get(i);
     if (result) el.classList.add(result === 'hit' ? 'is-played' : 'is-missed');
     const label = this.tiles[i].label;
